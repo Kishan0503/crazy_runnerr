@@ -2,6 +2,7 @@ import { Suspense, useEffect } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { AdaptiveDpr, Preload } from '@react-three/drei'
 import { CONFIG, SCENE_BG } from '../game/config'
+import { useGameStore } from '../game/store'
 import { GameLoop } from './GameLoop'
 import { Track } from './Track'
 import { Player } from './Player'
@@ -28,6 +29,9 @@ export function GameCanvas() {
       // Cap DPR for perf; AdaptiveDpr scales it down under load (PRD §13).
       dpr={[1, 2]}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
+      // Signal "scene visible" after the first painted frame so the Start-screen
+      // intro reveal plays for the user instead of behind the load flash.
+      onCreated={() => requestAnimationFrame(() => useGameStore.getState().setReady())}
       camera={{
         position: [...CONFIG.cameraPos],
         fov: CONFIG.cameraFov,

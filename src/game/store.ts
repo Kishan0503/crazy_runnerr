@@ -10,6 +10,9 @@ export type Phase = 'start' | 'playing' | 'paused' | 'gameover'
 
 interface GameStore {
   phase: Phase
+  /** true once the R3F canvas has painted its first frame (gates the intro reveal) */
+  ready: boolean
+  setReady: () => void
   /** coins collected this run (separate counter, §4.7) */
   coins: number
   /** best distance ever, persisted across reloads (§4.7, §10) */
@@ -47,6 +50,8 @@ function idleWorld() {
 export const useGameStore = create<GameStore>((set, get) => ({
   // The world boots frozen behind the Start screen — nothing moves until start().
   phase: 'start',
+  ready: false,
+  setReady: () => set({ ready: true }),
   coins: 0,
   best: loadBest(),
   lastDistance: 0,

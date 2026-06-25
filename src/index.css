@@ -31,3 +31,116 @@ canvas {
   display: block;
   touch-action: none;
 }
+
+/* ---------------------------------------------------------------------------
+ * Start-screen title reveal (Crazzyy Runnerr).
+ * The running figure (player_running.gif) sweeps left→right and the title is
+ * wiped in behind it, in sync — as if the runner unveils the name.
+ * ------------------------------------------------------------------------- */
+.cr-title-wrap {
+  position: relative;
+  display: inline-block;
+  padding: 0 0.15em;
+}
+
+.cr-title {
+  font-family: 'Luckiest Guy', system-ui, cursive;
+  letter-spacing: 0.02em;
+  /* Energetic warm gradient fill */
+  background-image: linear-gradient(180deg, #fff3b0 0%, #ffd23f 35%, #ff8a3d 70%, #ff5d8f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* Chunky arcade outline + glow so it pops on the dark scene */
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45)) drop-shadow(0 0 18px rgba(255, 160, 60, 0.35));
+}
+
+/* Applied once the scene is visible so the user actually sees the reveal. */
+.cr-title-play {
+  animation: cr-title-wipe 1.5s 0.05s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.cr-runner {
+  position: absolute;
+  top: 50%;
+  height: 1.7em;
+  width: auto;
+  left: -28%;
+  /* Black figure on white bg → white figure, transparent bg over the dark UI */
+  filter: invert(1);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  animation: cr-runner-sweep 1.7s ease-in-out both;
+}
+
+.cr-reveal-delayed {
+  animation: cr-fade-up 0.6s 1.45s both;
+}
+
+@keyframes cr-title-wipe {
+  0% {
+    clip-path: inset(0 100% 0 0);
+    opacity: 0;
+    transform: translateY(0.06em) scale(0.96);
+  }
+  18% {
+    opacity: 1;
+  }
+  82% {
+    clip-path: inset(0 0 0 0);
+    transform: translateY(0) scale(1);
+  }
+  90% {
+    transform: translateY(0) scale(1.05);
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes cr-runner-sweep {
+  0% {
+    left: -28%;
+    opacity: 0;
+    transform: translateY(-50%) scaleX(1.05);
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    left: 112%;
+    opacity: 0;
+    transform: translateY(-50%) scaleX(1.05);
+  }
+}
+
+@keyframes cr-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Respect reduced motion: reveal everything instantly, no sweep (§12). */
+@media (prefers-reduced-motion: reduce) {
+  .cr-title-play {
+    animation: none;
+  }
+  .cr-runner {
+    display: none;
+  }
+  .cr-reveal-delayed {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
