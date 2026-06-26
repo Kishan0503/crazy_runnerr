@@ -1,36 +1,95 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useGameStore } from '../game/store'
 
-/** A single control-legend row. */
-function Legend({ keys, label }: { keys: string; label: string }) {
+/* ----------------------------- inline icons ------------------------------ */
+function CoinIcon({ className = '' }: { className?: string }) {
   return (
-    <div className="flex items-center justify-between gap-6 text-sm">
-      <span className="rounded-md bg-white/10 px-2 py-1 font-mono text-xs text-white/90">
-        {keys}
+    <span
+      className={`inline-block rounded-full ${className}`}
+      style={{
+        background: 'radial-gradient(circle at 35% 30%, #ffe89a, #f5b21f 60%, #c8860a)',
+        boxShadow: '0 0 10px rgba(245,178,31,0.6), inset 0 1px 2px rgba(255,255,255,0.5)',
+      }}
+    />
+  )
+}
+function PlayGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+      <path d="M8 5.5v13a1 1 0 0 0 1.54.84l10-6.5a1 1 0 0 0 0-1.68l-10-6.5A1 1 0 0 0 8 5.5z" />
+    </svg>
+  )
+}
+function CrownGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path
+        d="M3 7l4 4 5-7 5 7 4-4-1.5 12H4.5L3 7z"
+        fill="#f5b21f"
+        stroke="#ffd970"
+        strokeWidth="0.6"
+      />
+    </svg>
+  )
+}
+function TrophyGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7 4h10v4a5 5 0 0 1-10 0V4z" />
+      <path d="M7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3" />
+      <path d="M12 13v3M9 20h6M10 20l.5-4h3l.5 4" />
+    </svg>
+  )
+}
+function GearGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1" />
+    </svg>
+  )
+}
+function ArrowGlyph({ dir }: { dir: 'left' | 'up' | 'down' }) {
+  const rot = dir === 'left' ? 0 : dir === 'up' ? 90 : -90
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: `rotate(${rot}deg)` }} aria-hidden="true">
+      <path d="M19 12H5M5 12l6-6M5 12l6 6" />
+    </svg>
+  )
+}
+
+/** A how-to-play control hint cell. */
+function HowTo({ glyph, label }: { glyph: React.ReactNode; label: string }) {
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--cr-panel-border)] bg-white/5 text-white/90">
+        {glyph}
       </span>
-      <span className="text-white/70">{label}</span>
+      <span className="cr-label !text-[0.55rem]">{label}</span>
     </div>
   )
 }
 
 /**
- * Start screen (PRD §5) with an animated title reveal.
+ * Start screen (PRD §5), styled to the reference: a night-city neon look with a
+ * heavy white/blue title, a glowing PLAY NOW pill, a best-distance card, and the
+ * currently-selected character/track shown below the button.
  *
- * Once the 3D scene is visible (store.ready, set on the canvas's first frame),
- * the running figure (player_running.gif) sweeps left→right and the game name
- * "Crazzyy Runnerr" is wiped in behind it, in sync — as if the runner unveils
- * the title. Gating on `ready` (with a fallback timer) ensures the reveal plays
- * for the user instead of behind the initial load. Reduced-motion shows it
- * instantly. Tapping anywhere (or Enter/Space) starts a fresh run.
+ * Flow: the player stays in Idle behind this screen (world is frozen). Pressing
+ * PLAY NOW (or Enter/Space) flags `starting`, which plays a polished fade/lift-out
+ * of all UI; only when that finishes does start() run — flipping the world on and
+ * switching the character to the Run animation.
  */
 export function StartScreen() {
   const phase = useGameStore((s) => s.phase)
   const best = useGameStore((s) => s.best)
-  const start = useGameStore((s) => s.start)
+  const wallet = useGameStore((s) => s.wallet)
   const ready = useGameStore((s) => s.ready)
+  const starting = useGameStore((s) => s.starting)
+  const beginStart = useGameStore((s) => s.beginStart)
+  const start = useGameStore((s) => s.start)
 
-  // Play the reveal when the scene is up; fall back after a short wait so the
-  // screen can never get stuck hidden if the ready signal never arrives.
+  // Reveal the screen once the scene has painted (fallback timer if it never does).
   const [armed, setArmed] = useState(false)
   useEffect(() => {
     if (ready) {
@@ -41,69 +100,124 @@ export function StartScreen() {
     return () => clearTimeout(t)
   }, [ready])
 
+  // When the exit transition is requested, play it out then begin the run.
+  const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!starting) return
+    exitTimer.current = setTimeout(() => start(), 560)
+    return () => {
+      if (exitTimer.current) clearTimeout(exitTimer.current)
+    }
+  }, [starting, start])
+
   if (phase !== 'start') return null
 
-  // Hidden until armed, then revealed via the play/animation classes.
-  const hide = (style?: React.CSSProperties): React.CSSProperties | undefined =>
-    armed ? style : { ...style, visibility: 'hidden' }
+  const reveal = (_i?: number) => (armed && !starting ? 'cr-enter' : '')
+  const style = (i: number): React.CSSProperties =>
+    armed ? { animationDelay: `${i * 0.08}s` } : { visibility: 'hidden' }
 
   return (
     <div
-      className="absolute inset-0 z-20 flex cursor-pointer flex-col items-center justify-center gap-7 bg-gradient-to-b from-black/40 via-black/60 to-black/80 px-6 text-center backdrop-blur-sm"
-      onClick={() => start()}
+      className={`absolute inset-0 z-20 overflow-hidden bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(20,40,90,0.35),transparent_60%)] ${
+        starting ? 'cr-exit' : ''
+      }`}
     >
-      <div className="flex flex-col items-center gap-3">
-        {/* Runner sweep + synced title wipe */}
-        <div className="cr-title-wrap text-5xl sm:text-7xl">
-          {armed && (
-            <img src="/player_running.gif" alt="" aria-hidden="true" className="cr-runner" />
-          )}
-          <h1
-            className={`cr-title whitespace-nowrap ${armed ? 'cr-title-play' : ''}`}
-            style={hide()}
-          >
-            Crazzyy Runnerr
-          </h1>
+      {/* Top bar: coin wallet (left), trophy + settings (right) */}
+      <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4 sm:p-5">
+        <div className={`cr-panel flex items-center gap-2 py-1.5 pl-2 pr-1.5 ${reveal(0)}`} style={style(0)}>
+          <CoinIcon className="h-5 w-5" />
+          <span className="text-base font-bold tabular-nums text-amber-200">{wallet}</span>
+          <button type="button" aria-label="Add coins" className="cr-icon-btn ml-1 h-7 w-7 rounded-xl text-lg leading-none">
+            +
+          </button>
         </div>
 
-        <p
-          className={armed ? 'cr-reveal-delayed max-w-xs text-sm text-white/70' : 'max-w-xs text-sm text-white/70'}
-          style={hide({ animationDelay: '1.5s' })}
-        >
-          Read the track. Switch, jump, and slide to survive — chase a longer
-          distance every run.
-        </p>
+        <div className={`flex items-center gap-2.5 ${reveal(0)}`} style={style(0)}>
+          <button type="button" aria-label="Leaderboard" className="cr-icon-btn h-10 w-10 rounded-xl">
+            <TrophyGlyph />
+          </button>
+          <button type="button" aria-label="Settings" className="cr-icon-btn h-10 w-10 rounded-xl">
+            <GearGlyph />
+          </button>
+        </div>
       </div>
 
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          start()
-        }}
-        className={`pointer-events-auto rounded-2xl bg-white px-8 py-4 text-lg font-bold text-black shadow-lg transition-transform focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white active:scale-95 ${armed ? 'cr-reveal-delayed' : ''}`}
-        style={hide({ animationDelay: '1.6s' })}
-      >
-        Tap to start
-      </button>
-
+      {/* Best distance card (left, vertically centered) */}
       <div
-        className={`flex flex-col gap-2 rounded-xl bg-black/30 p-4 ${armed ? 'cr-reveal-delayed' : ''}`}
-        style={hide({ animationDelay: '1.7s' })}
+        className={`cr-panel absolute left-4 top-1/2 hidden -translate-y-1/2 px-5 py-4 sm:left-6 sm:block ${reveal(3)}`}
+        style={style(3)}
       >
-        <Legend keys="← →  /  A D  /  swipe" label="Switch lane" />
-        <Legend keys="↑  /  W  /  Space  /  swipe up" label="Jump" />
-        <Legend keys="↓  /  S  /  swipe down" label="Slide" />
+        <div className="cr-label">Best Distance</div>
+        <div className="mt-1 flex items-end gap-1">
+          <span className="text-3xl font-extrabold tabular-nums text-white">{best}</span>
+          <span className="mb-1 text-sm font-semibold text-white/55">m</span>
+        </div>
+        <div className="mt-1"><CrownGlyph /></div>
       </div>
 
-      {best > 0 && (
-        <p
-          className={`text-xs uppercase tracking-widest text-white/50 ${armed ? 'cr-reveal-delayed' : ''}`}
-          style={hide({ animationDelay: '1.8s' })}
-        >
-          Best distance {best}
+      {/* Center stack — nudged up so the runner/track below stays uncluttered */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center -translate-y-[9vh] sm:-translate-y-[11vh]">
+        <p className={`cr-label !tracking-[0.32em] ${reveal(0)}`} style={style(0)}>
+          How far can you go?
         </p>
-      )}
+
+        <h1 className={`cr-title my-2 text-6xl sm:text-8xl ${armed && !starting ? 'cr-title-enter' : ''}`} style={style(1)}>
+          <span className="cr-word cr-word-1">Crazzy</span>
+          <span className="cr-word cr-word-2">Runnerr</span>
+        </h1>
+
+        <p className={`cr-tagline ${reveal(2)}`} style={style(2)}>
+          Switch Lanes. Jump. Slide. Survive.
+        </p>
+
+        <button
+          type="button"
+          onClick={() => beginStart()}
+          className={`cr-play mt-7 flex items-center gap-3 px-9 py-4 text-lg ${reveal(3)}`}
+          style={style(3)}
+        >
+          <PlayGlyph />
+          Play Now
+        </button>
+
+        {/* Currently selected character + track (static info card) */}
+        <div
+          className={`cr-panel mt-7 flex items-stretch divide-x divide-[var(--cr-panel-border)] ${reveal(4)}`}
+          style={style(4)}
+        >
+          <div className="flex items-center gap-3 px-5 py-3 text-left">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--cr-panel-border)] bg-white/5 text-[10px] font-bold text-white/80">
+              P1
+            </span>
+            <div>
+              <div className="cr-label !text-[0.55rem]">Character</div>
+              <div className="text-sm font-semibold text-white">Runner</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-5 py-3 text-left">
+            <span
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--cr-panel-border)]"
+              style={{ background: 'radial-gradient(circle at 50% 35%, rgba(59,130,246,0.5), rgba(8,12,22,0.6))' }}
+            >
+              <span className="h-2 w-2 rounded-full bg-[var(--cr-blue-bright)] shadow-[0_0_8px_var(--cr-blue-bright)]" />
+            </span>
+            <div>
+              <div className="cr-label !text-[0.55rem]">Track</div>
+              <div className="text-sm font-semibold text-white">Neon City</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* How to play (bottom center) */}
+      <div className={`absolute inset-x-0 bottom-6 flex justify-center ${reveal(5)}`} style={style(5)}>
+        <div className="cr-panel flex items-center gap-6 px-6 py-3">
+          <span className="cr-label hidden sm:block">How to Play</span>
+          <HowTo glyph={<ArrowGlyph dir="left" />} label="Switch" />
+          <HowTo glyph={<ArrowGlyph dir="up" />} label="Jump" />
+          <HowTo glyph={<ArrowGlyph dir="down" />} label="Slide" />
+        </div>
+      </div>
     </div>
   )
 }

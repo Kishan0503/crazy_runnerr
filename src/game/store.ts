@@ -3,7 +3,7 @@ import { resetWorld, world } from './world'
 import { resetPlayer } from './playerState'
 import { resetSpawner } from './spawn'
 import { inputBus } from './input'
-import { loadBest, saveBest } from './storage'
+import { loadBest, loadWallet, saveBest, saveWallet } from './storage'
 
 /** Game phase state machine (PRD §5): START → PLAYING → GAME_OVER → (PLAYING…). */
 export type Phase = 'start' | 'playing' | 'paused' | 'gameover'
@@ -15,10 +15,18 @@ interface GameStore {
   setReady: () => void
   /** coins collected this run (separate counter, §4.7) */
   coins: number
+  /** persistent coin wallet — running total across all runs (shown on start) */
+  wallet: number
   /** best distance ever, persisted across reloads (§4.7, §10) */
   best: number
   /** final distance of the last finished run (for the game-over screen) */
   lastDistance: number
+  /** bumped each fresh run so the scene remounts obstacles immediately (no stale hits) */
+  runId: number
+  /** true while the start-screen exit transition plays, before the run begins */
+  starting: boolean
+  /** kick off the start-screen exit transition (button + Enter/Space) */
+  beginStart: () => void
   /** begin a fresh run (start screen + retry) */
   start: () => void
   /** first collision → freeze the world and show game over (§4.4) */
@@ -53,12 +61,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
   ready: false,
   setReady: () => set({ ready: true }),
   coins: 0,
+  wallet: loadWallet(),
   best: loadBest(),
   lastDistance: 0,
+  runId: 0,
+  starting: false,
+
+  // Start-screen "Play Now": flag the exit transition; the screen plays it out
+  // and calls start() when it finishes (player stays Idle until then).
+  beginStart: () => {
+    if (get().phase === 'start' && !get().starting) set({ starting: true })
+  },
 
   start: () => {
-    freshRun() // sets world.running = true
-    set({ phase: 'playing', coins: 0 })
+    freshRun() // sets world.running = true and bumps world.runId
+    // Mirror the new runId into React state so the obstacle field remounts
+    // synchronously and no obstacle from the previous run can survive a frame.
+    set({ phase: 'playing', coins: 0, starting: false, runId: world.runId })
   },
 
   gameOver: () => {
@@ -67,7 +86,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const distance = Math.floor(world.distance)
     const best = Math.max(get().best, distance)
     if (best > get().best) saveBest(best)
-    set({ phase: 'gameover', best, lastDistance: distance })
+    // Bank this run's coins into the persistent wallet (start-screen total).
+    const wallet = get().wallet + get().coins
+    saveWallet(wallet)
+    set({ phase: 'gameover', best, lastDistance: distance, wallet })
   },
 
   pause: () => {
@@ -84,7 +106,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   quit: () => {
     idleWorld()
-    set({ phase: 'start', coins: 0 })
+    set({ phase: 'start', coins: 0, starting: false })
   },
 
   collectCoin: () => set((s) => ({ coins: s.coins + 1 })),

@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.claude
 
 # Heavy source 3D models (25–36MB each). The optimized, web-ready versions
 # live in public/models/ and ARE committed. Keep originals local only.

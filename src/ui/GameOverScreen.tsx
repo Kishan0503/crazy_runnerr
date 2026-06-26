@@ -5,11 +5,11 @@ function Stat({ label, value, accent }: { label: string; value: number; accent?:
   return (
     <div className="flex flex-col items-center">
       <span
-        className={`text-3xl font-black tabular-nums ${accent ? 'text-amber-300' : 'text-white'}`}
+        className={`text-3xl font-extrabold tabular-nums ${accent ? 'text-amber-300' : 'text-white'}`}
       >
         {value}
       </span>
-      <span className="text-xs uppercase tracking-widest text-white/50">{label}</span>
+      <span className="cr-label mt-1">{label}</span>
     </div>
   )
 }
@@ -32,19 +32,19 @@ export function GameOverScreen() {
 
   return (
     <div
-      className="absolute inset-0 z-20 flex cursor-pointer flex-col items-center justify-center gap-6 bg-black/65 px-6 text-center backdrop-blur-sm"
+      className="absolute inset-0 z-20 flex cursor-pointer flex-col items-center justify-center gap-7 bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(20,40,90,0.4),rgba(0,0,0,0.72))] px-6 text-center backdrop-blur-sm"
       onClick={() => start()}
     >
-      <div className="flex flex-col items-center gap-1">
+      <div className="flex flex-col items-center gap-3">
         {isNewBest && (
-          <span className="rounded-full bg-amber-400/90 px-3 py-1 text-xs font-bold uppercase tracking-widest text-black">
+          <span className="rounded-full border border-amber-300/40 bg-amber-400/90 px-3 py-1 text-xs font-bold uppercase tracking-widest text-black shadow-[0_0_18px_rgba(245,178,31,0.5)]">
             New best!
           </span>
         )}
-        <h2 className="text-5xl font-black tracking-tight text-white">Game Over</h2>
+        <h2 className="cr-title text-6xl"><span className="cr-word-2">Game Over</span></h2>
       </div>
 
-      <div className="flex items-start gap-8">
+      <div className="cr-panel flex items-start gap-9 px-8 py-5">
         <Stat label="Distance" value={lastDistance} />
         <Stat label="Best" value={best} />
         <Stat label="Coins" value={coins} accent />
@@ -56,7 +56,7 @@ export function GameOverScreen() {
           e.stopPropagation()
           start()
         }}
-        className="pointer-events-auto rounded-2xl bg-white px-8 py-4 text-lg font-bold text-black shadow-lg transition-transform focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white active:scale-95"
+        className="cr-play pointer-events-auto px-9 py-4 text-lg"
       >
         Tap to retry
       </button>

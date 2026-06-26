@@ -1,12 +1,14 @@
 import { Suspense, useEffect } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { AdaptiveDpr, Preload } from '@react-three/drei'
+import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing'
 import { CONFIG, SCENE_BG } from '../game/config'
 import { useGameStore } from '../game/store'
 import { GameLoop } from './GameLoop'
 import { Track } from './Track'
 import { Player } from './Player'
 import { ObstacleField } from './ObstacleField'
+import { Environment } from './Environment'
 
 /**
  * Fixed behind-and-above chase camera (PRD §4.1, §8.2). No orbit controls.
@@ -23,9 +25,13 @@ function ChaseCamera() {
 }
 
 export function GameCanvas() {
+  // Remount the obstacle field on each fresh run so a restart never inherits a
+  // stale obstacle that could re-trigger game over before React clears it.
+  const runId = useGameStore((s) => s.runId)
   return (
     <Canvas
       className="h-full w-full"
+      shadows
       // Cap DPR for perf; AdaptiveDpr scales it down under load (PRD §13).
       dpr={[1, 2]}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
@@ -36,22 +42,33 @@ export function GameCanvas() {
         position: [...CONFIG.cameraPos],
         fov: CONFIG.cameraFov,
         near: 0.1,
-        far: 200,
+        far: 260,
       }}
     >
-      {/* Background + fog share a color so obstacles fade in, not pop (§8.2). */}
-      <color attach="background" args={[SCENE_BG]} />
+      {/* Fog blends the runway into the night so obstacles fade in (§8.2). The
+          gradient sky background is set by <Environment>. */}
       <fog attach="fog" args={[SCENE_BG, CONFIG.fogNear, CONFIG.fogFar]} />
 
-      {/* Lighting: soft ambient/hemisphere fill + a key directional light. */}
-      <hemisphereLight args={['#cdd6ff', '#1a1f2e', 0.55]} />
-      <ambientLight intensity={0.35} />
+      {/* Lighting: cool blue night. Soft hemisphere/ambient fill, a crisp key
+          light for the player's ground shadow, and a blue rim for neon mood. */}
+      <hemisphereLight args={['#9fc0ff', '#0a1124', 0.45]} />
+      <ambientLight intensity={0.25} />
       <directionalLight
-        position={[6, 12, 6]}
-        intensity={1.25}
+        position={[5, 13, 7]}
+        intensity={1.5}
+        color="#dfe9ff"
         castShadow
-        shadow-mapSize={[1024, 1024]}
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0005}
+        shadow-camera-near={1}
+        shadow-camera-far={40}
+        shadow-camera-left={-8}
+        shadow-camera-right={8}
+        shadow-camera-top={10}
+        shadow-camera-bottom={-12}
       />
+      {/* Cool rim/fill from the side+back for a neon edge on the character. */}
+      <directionalLight position={[-6, 4, -8]} intensity={0.6} color="#4f80ff" />
 
       <ChaseCamera />
 
@@ -59,11 +76,23 @@ export function GameCanvas() {
       <GameLoop />
 
       <Suspense fallback={null}>
+        <Environment />
         <Track />
         <Player />
-        <ObstacleField />
+        <ObstacleField key={runId} />
         <Preload all />
       </Suspense>
+
+      {/* Neon glow + a touch of vignette for cinematic depth. */}
+      <EffectComposer multisampling={4}>
+        <Bloom
+          intensity={0.85}
+          luminanceThreshold={0.55}
+          luminanceSmoothing={0.25}
+          mipmapBlur
+        />
+        <Vignette eskil={false} offset={0.25} darkness={0.75} />
+      </EffectComposer>
 
       <AdaptiveDpr pixelated={false} />
     </Canvas>

@@ -12,10 +12,14 @@ import { useGameStore } from './store'
 export function useMetaControls() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const { phase, start, pause, resume } = useGameStore.getState()
+      const { phase, start, beginStart, pause, resume } = useGameStore.getState()
 
       if (e.code === 'Enter' || e.code === 'Space') {
-        if (phase === 'start' || phase === 'gameover') {
+        if (phase === 'start') {
+          // Route through the polished exit transition (StartScreen owns it).
+          e.preventDefault()
+          beginStart()
+        } else if (phase === 'gameover') {
           e.preventDefault()
           start()
         } else if (phase === 'paused') {

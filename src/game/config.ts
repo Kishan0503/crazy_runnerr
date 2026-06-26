@@ -32,19 +32,28 @@ export const CONFIG = {
   spawnGapMin: 9.5, // tightest row spacing
   spawnGapTighten: 0.25, // how much the gap shrinks per unit of extra speed
 
+  // Difficulty ramp (distance-driven). The start is deliberately sparse and
+  // eases up as the player gets further, so the game never feels hard at 0 m.
+  spawnWarmup: 12, // no obstacles for the first N metres (gentle on-ramp)
+  spawnGapEarly: 24, // row spacing right after warm-up (sparse, not empty)
+  difficultyRampDistance: 600, // metres over which density ramps to its peak
+  twoLaneMaxChance: 0.6, // peak probability a row blocks two lanes (1 lane early)
+
   coinValue: 5, // score added per coin
   coinsPerRun: 3, // coins per spawned coin run
 
   // Camera
-  cameraPos: [0, 5.6, 9.5], // chase camera position (behind + above)
-  cameraLookAt: [0, 1.1, -10], // look target down the track
+  cameraPos: [0, 5.4, 9.5], // chase camera position (behind + above)
+  cameraLookAt: [0, 1.1, -12], // look target down the track
   cameraFov: 62,
-  fogNear: 26,
-  fogFar: 80,
+  fogNear: 22,
+  fogFar: 105,
 } as const
 
 /** Scene/background color. Fog matches this so obstacles fade in (PRD §8.2). */
-export const SCENE_BG = '#10131c'
+export const SCENE_BG = '#070b14'
+/** Horizon glow color used by the gradient backdrop + skyline blend. */
+export const SCENE_HORIZON = '#0e1b34'
 
 /**
  * Logical obstacle hitboxes (PRD §4.3). Collision uses THESE, never the visual

@@ -14,4 +14,15 @@ export function installDevBridge() {
     player,
     store: useGameStore,
   }
+
+  // Headless verification helper: `?autoplay` jumps straight into a run once the
+  // scene is ready, so automated screenshots can capture live gameplay.
+  if (new URLSearchParams(location.search).has('autoplay')) {
+    const unsub = useGameStore.subscribe((s) => {
+      if (s.ready && s.phase === 'start') {
+        unsub()
+        setTimeout(() => useGameStore.getState().start(), 50)
+      }
+    })
+  }
 }

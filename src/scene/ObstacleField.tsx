@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import { CONFIG } from '../game/config'
@@ -108,17 +108,11 @@ function ActiveCoin({
  * rule and "coins prefer open lanes" both live in spawn.ts.
  */
 export function ObstacleField() {
-  const phase = useGameStore((s) => s.phase)
+  // This component is keyed by runId in GameCanvas, so each fresh run mounts a
+  // brand-new instance with empty arrays — no stale obstacle can survive into
+  // the new run (instant, race-free restart). Resume from pause keeps the field.
   const [obstacles, setObstacles] = useState<ActiveObs[]>([])
   const [coins, setCoins] = useState<ActiveCoinData[]>([])
-
-  // Clear the field at the start of every fresh run so nothing leaks between runs.
-  useEffect(() => {
-    if (phase === 'playing') {
-      setObstacles([])
-      setCoins([])
-    }
-  }, [phase])
 
   const recycleObstacle = useCallback((id: number) => {
     setObstacles((prev) => prev.filter((o) => o.id !== id))
@@ -129,7 +123,7 @@ export function ObstacleField() {
 
   useFrame(() => {
     if (!world.running) return
-    const plan = tickSpawner(world.dz, world.speed)
+    const plan = tickSpawner(world.dz, world.distance)
     if (!plan) return
 
     setObstacles((prev) => [

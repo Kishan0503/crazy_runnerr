@@ -173,14 +173,19 @@ function PlayerModel({ onMode }: { onMode: (mode: AnimMode) => void }) {
     g.position.y = -box.min.y
   }, [object, scale, rotationY])
 
-  // Cross-fade clips based on the player's live state. Run/idle loop; jump and
-  // slide play once and hold their last frame until the state changes back.
+  // Cross-fade clips based on the player's live state. Idle while the world is
+  // frozen (start screen + the Play Now exit transition); only once the run is
+  // actually live do we switch to Run/Jump/Slide. Run/idle loop; jump and slide
+  // play once and hold their last frame until the state changes back.
   useFrame(() => {
     if (!hasClips) return
     const s = player
-    let want = clips.run ?? clips.idle ?? names[0]
-    if (!s.grounded && clips.jump) want = clips.jump
-    else if (s.sliding && clips.slide) want = clips.slide
+    let want = clips.idle ?? clips.run ?? names[0]
+    if (world.running) {
+      want = clips.run ?? clips.idle ?? names[0]
+      if (!s.grounded && clips.jump) want = clips.jump
+      else if (s.sliding && clips.slide) want = clips.slide
+    }
     if (want && want !== current.current) {
       const next = actions[want]
       if (next) {

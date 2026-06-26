@@ -13,20 +13,20 @@ export function PauseOverlay() {
   if (phase !== 'paused') return null
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-6 bg-black/55 px-6 text-center backdrop-blur-sm">
-      <h2 className="text-4xl font-black tracking-tight text-white">Paused</h2>
-      <div className="flex flex-col items-center gap-3">
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-7 bg-black/55 px-6 text-center backdrop-blur-sm">
+      <h2 className="cr-title text-5xl"><span className="cr-word-1">Paused</span></h2>
+      <div className="flex flex-col items-center gap-4">
         <button
           type="button"
           onClick={() => resume()}
-          className="rounded-2xl bg-white px-8 py-3 text-lg font-bold text-black active:scale-95"
+          className="cr-play px-9 py-3.5 text-lg"
         >
           Resume
         </button>
         <button
           type="button"
           onClick={() => quit()}
-          className="rounded-xl px-6 py-2 text-sm font-semibold text-white/70 underline-offset-4 hover:underline active:scale-95"
+          className="cr-label px-6 py-2 underline-offset-4 hover:text-white/90 hover:underline active:scale-95"
         >
           Quit to menu
         </button>

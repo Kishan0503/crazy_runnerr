@@ -27,7 +27,7 @@ export function Coin() {
     <group ref={spin} position={[0, COIN_Y, 0]}>
       <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
         <cylinderGeometry args={[COIN_RADIUS, COIN_RADIUS, 0.08, 20]} />
-        <meshStandardMaterial color="#ffcf3f" emissive="#7a5a00" emissiveIntensity={0.4} metalness={0.6} roughness={0.3} />
+        <meshStandardMaterial color="#ffd23f" emissive="#ffae1f" emissiveIntensity={1.4} metalness={0.6} roughness={0.25} toneMapped={false} />
       </mesh>
     </group>
   )

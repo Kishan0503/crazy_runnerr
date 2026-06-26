@@ -20,6 +20,8 @@ interface World {
   distance: number
   /** how far the world should move in +Z this frame (speed × clamped dt) */
   dz: number
+  /** incremented on every fresh run; lets the scene drop stale obstacles at once */
+  runId: number
 }
 
 export const world: World = {
@@ -28,6 +30,7 @@ export const world: World = {
   speed: CONFIG.speedStart,
   distance: 0,
   dz: 0,
+  runId: 0,
 }
 
 /** Reset to a fresh run (called on start / retry so nothing leaks between runs). */
@@ -35,5 +38,6 @@ export function resetWorld() {
   world.speed = CONFIG.speedStart
   world.distance = 0
   world.dz = 0
+  world.runId++
   world.running = true
 }

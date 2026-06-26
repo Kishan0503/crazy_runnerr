@@ -4,7 +4,21 @@
  * Global base styles for the 3D viewport (PRD §5, §6, §13).
  * The WebGL canvas fills the screen; HUD/menus layer above as DOM.
  * Disable page scroll/zoom/selection so gameplay gestures aren't hijacked.
+ *
+ * Visual language (ref): deep navy night scene, crisp Inter UI type, a heavy
+ * display title with a white→blue split, and electric-blue neon accents.
  */
+:root {
+  --cr-blue: #3b82f6;
+  --cr-blue-bright: #5ea0ff;
+  --cr-blue-deep: #1d4ed8;
+  --cr-ink: #060a14;
+  --cr-panel: rgba(13, 19, 33, 0.55);
+  --cr-panel-border: rgba(120, 160, 230, 0.16);
+  --cr-text: #eaf1ff;
+  --cr-muted: rgba(200, 214, 240, 0.6);
+}
+
 html,
 body,
 #root {
@@ -15,9 +29,9 @@ body,
 
 body {
   overflow: hidden;
-  background: #0c0e14;
-  color: #f4f6fb;
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  background: #04060c;
+  color: var(--cr-text);
+  font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
   /* Prevent scroll/zoom on touch so swipes drive the game, not the page (§6). */
   touch-action: none;
   -webkit-user-select: none;
@@ -33,96 +47,154 @@ canvas {
 }
 
 /* ---------------------------------------------------------------------------
- * Start-screen title reveal (Crazzyy Runnerr).
- * The running figure (player_running.gif) sweeps left→right and the title is
- * wiped in behind it, in sync — as if the runner unveils the name.
+ * Reusable UI atoms (glass panels, neon button) — ref start/gameplay HUD.
  * ------------------------------------------------------------------------- */
-.cr-title-wrap {
-  position: relative;
-  display: inline-block;
-  padding: 0 0.15em;
+.cr-panel {
+  background: linear-gradient(180deg, rgba(20, 28, 46, 0.55), rgba(8, 12, 22, 0.6));
+  border: 1px solid var(--cr-panel-border);
+  border-radius: 18px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
+.cr-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cr-muted);
+}
+
+/* PLAY NOW — glowing outlined pill with a soft animated halo. */
+.cr-play {
+  position: relative;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #eaf2ff;
+  background: linear-gradient(180deg, rgba(34, 64, 124, 0.55), rgba(16, 28, 56, 0.6));
+  border: 1.5px solid rgba(110, 165, 255, 0.85);
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 1px rgba(80, 140, 255, 0.25),
+    0 0 22px rgba(59, 130, 246, 0.55),
+    0 0 60px rgba(59, 130, 246, 0.3),
+    inset 0 0 18px rgba(70, 130, 240, 0.25);
+  transition: transform 0.12s ease, box-shadow 0.25s ease, filter 0.25s ease;
+  animation: cr-play-pulse 2.6s ease-in-out infinite;
+}
+.cr-play:hover {
+  filter: brightness(1.12);
+  box-shadow:
+    0 0 0 1px rgba(120, 170, 255, 0.4),
+    0 0 30px rgba(80, 150, 255, 0.7),
+    0 0 80px rgba(59, 130, 246, 0.4),
+    inset 0 0 22px rgba(90, 150, 255, 0.35);
+}
+.cr-play:active {
+  transform: scale(0.96);
+}
+
+@keyframes cr-play-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(80, 140, 255, 0.25),
+      0 0 22px rgba(59, 130, 246, 0.5),
+      0 0 55px rgba(59, 130, 246, 0.25),
+      inset 0 0 18px rgba(70, 130, 240, 0.22);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(100, 160, 255, 0.35),
+      0 0 30px rgba(70, 140, 255, 0.75),
+      0 0 85px rgba(59, 130, 246, 0.45),
+      inset 0 0 24px rgba(90, 150, 255, 0.32);
+  }
+}
+
+/* Round icon button (trophy / settings / pause / +). */
+.cr-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(220, 232, 255, 0.85);
+  background: linear-gradient(180deg, rgba(20, 28, 46, 0.6), rgba(8, 12, 22, 0.65));
+  border: 1px solid var(--cr-panel-border);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  transition: transform 0.12s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.cr-icon-btn:hover {
+  color: #fff;
+  border-color: rgba(120, 170, 255, 0.5);
+}
+.cr-icon-btn:active {
+  transform: scale(0.93);
+}
+
+/* ---------------------------------------------------------------------------
+ * Title (CRAZZY / RUNNERR) — heavy display face, white over blue (ref).
+ * ------------------------------------------------------------------------- */
 .cr-title {
-  font-family: 'Luckiest Guy', system-ui, cursive;
-  letter-spacing: 0.02em;
-  /* Energetic warm gradient fill */
-  background-image: linear-gradient(180deg, #fff3b0 0%, #ffd23f 35%, #ff8a3d 70%, #ff5d8f 100%);
+  font-family: 'Lilita One', system-ui, sans-serif;
+  text-transform: uppercase;
+  font-weight: 400;
+  line-height: 0.82;
+  letter-spacing: 0.015em;
+  margin: 0;
+}
+.cr-title .cr-word {
+  display: block;
+}
+.cr-title .cr-word-1 {
+  color: #f3f7ff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35), 0 0 26px rgba(180, 205, 255, 0.25);
+}
+.cr-title .cr-word-2 {
+  background-image: linear-gradient(180deg, #6fb0ff 0%, #3b82f6 55%, #1f5fe0 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  /* Chunky arcade outline + glow so it pops on the dark scene */
-  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45)) drop-shadow(0 0 18px rgba(255, 160, 60, 0.35));
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)) drop-shadow(0 0 26px rgba(59, 130, 246, 0.55));
 }
 
-/* Applied once the scene is visible so the user actually sees the reveal. */
-.cr-title-play {
-  animation: cr-title-wipe 1.5s 0.05s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+/* Tagline rule (— SWITCH LANES. … —) with little end caps. */
+.cr-tagline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: 0.72rem;
+  color: rgba(210, 224, 250, 0.82);
+}
+.cr-tagline::before,
+.cr-tagline::after {
+  content: '';
+  width: 34px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(120, 165, 255, 0.8), transparent);
 }
 
-.cr-runner {
-  position: absolute;
-  top: 50%;
-  height: 1.7em;
-  width: auto;
-  left: -28%;
-  /* Black figure on white bg → white figure, transparent bg over the dark UI */
-  filter: invert(1);
-  mix-blend-mode: screen;
-  pointer-events: none;
-  animation: cr-runner-sweep 1.7s ease-in-out both;
+/* ---------------------------------------------------------------------------
+ * Start-screen entrance + exit (Play Now) transitions.
+ *  - entrance: each block fades/rises in, staggered, once the scene is ready.
+ *  - exit: on Play Now everything fades + lifts out before the run begins.
+ * ------------------------------------------------------------------------- */
+.cr-enter {
+  animation: cr-fade-up 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
-
-.cr-reveal-delayed {
-  animation: cr-fade-up 0.6s 1.45s both;
-}
-
-@keyframes cr-title-wipe {
-  0% {
-    clip-path: inset(0 100% 0 0);
-    opacity: 0;
-    transform: translateY(0.06em) scale(0.96);
-  }
-  18% {
-    opacity: 1;
-  }
-  82% {
-    clip-path: inset(0 0 0 0);
-    transform: translateY(0) scale(1);
-  }
-  90% {
-    transform: translateY(0) scale(1.05);
-  }
-  100% {
-    clip-path: inset(0 0 0 0);
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes cr-runner-sweep {
-  0% {
-    left: -28%;
-    opacity: 0;
-    transform: translateY(-50%) scaleX(1.05);
-  }
-  12% {
-    opacity: 1;
-  }
-  88% {
-    opacity: 1;
-  }
-  100% {
-    left: 112%;
-    opacity: 0;
-    transform: translateY(-50%) scaleX(1.05);
-  }
+.cr-title-enter {
+  animation: cr-title-in 0.85s cubic-bezier(0.16, 0.8, 0.24, 1) both;
 }
 
 @keyframes cr-fade-up {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(16px);
   }
   to {
     opacity: 1;
@@ -130,17 +202,98 @@ canvas {
   }
 }
 
-/* Respect reduced motion: reveal everything instantly, no sweep (§12). */
-@media (prefers-reduced-motion: reduce) {
-  .cr-title-play {
-    animation: none;
+@keyframes cr-title-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.92);
   }
-  .cr-runner {
-    display: none;
-  }
-  .cr-reveal-delayed {
-    animation: none;
+  to {
     opacity: 1;
-    transform: none;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Exit: applied to the whole start overlay when Play Now is pressed. */
+.cr-exit {
+  animation: cr-screen-out 0.55s cubic-bezier(0.6, 0, 0.4, 1) forwards;
+  pointer-events: none;
+}
+.cr-exit .cr-title {
+  animation: cr-title-out 0.5s cubic-bezier(0.6, 0, 0.4, 1) forwards;
+}
+.cr-exit-up {
+  animation: cr-out-up 0.45s cubic-bezier(0.6, 0, 0.4, 1) forwards;
+}
+.cr-exit-down {
+  animation: cr-out-down 0.45s cubic-bezier(0.6, 0, 0.4, 1) forwards;
+}
+
+@keyframes cr-screen-out {
+  to {
+    opacity: 0;
+    backdrop-filter: blur(0);
+    -webkit-backdrop-filter: blur(0);
+  }
+}
+@keyframes cr-title-out {
+  to {
+    opacity: 0;
+    transform: translateY(-26px) scale(1.06);
+    filter: blur(4px);
+  }
+}
+@keyframes cr-out-up {
+  to {
+    opacity: 0;
+    transform: translateY(-22px);
+  }
+}
+@keyframes cr-out-down {
+  to {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Gameplay HUD: swipe-to-move hint that fades out after the first moments.
+ * ------------------------------------------------------------------------- */
+.cr-hint-hand {
+  animation: cr-hand-nudge 1.4s ease-in-out infinite;
+}
+@keyframes cr-hand-nudge {
+  0%, 100% { transform: translateX(-5px); }
+  50% { transform: translateX(5px); }
+}
+.cr-fade-out-slow {
+  animation: cr-fade-out 0.6s ease forwards;
+}
+@keyframes cr-fade-out {
+  to { opacity: 0; }
+}
+
+/* Subtle entrance for HUD chips when a run starts. */
+.cr-hud-in {
+  animation: cr-fade-up 0.45s ease both;
+}
+
+/* Respect reduced motion: reveal instantly, no looping/exit motion (§12). */
+@media (prefers-reduced-motion: reduce) {
+  .cr-enter,
+  .cr-title-enter,
+  .cr-hud-in {
+    animation: none;
+  }
+  .cr-play {
+    animation: none;
+  }
+  .cr-exit,
+  .cr-exit .cr-title,
+  .cr-exit-up,
+  .cr-exit-down {
+    animation-duration: 0.2s;
+  }
+  .cr-hint-hand {
+    animation: none;
   }
 }

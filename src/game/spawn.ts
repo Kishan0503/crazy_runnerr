@@ -19,6 +19,18 @@ const KINDS: ObstacleKind[] = ['low', 'overhead', 'block']
 /** Probability that a given row also carries a coin run. */
 const COIN_ROW_CHANCE = 0.6
 
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t
+
+/**
+ * Difficulty 0→1 as a function of distance covered. 0 right after warm-up, 1 at
+ * `difficultyRampDistance`. Smoothstep so the increase feels organic, not linear.
+ */
+export function difficultyAt(distance: number): number {
+  const t = clamp01(distance / CONFIG.difficultyRampDistance)
+  return t * t * (3 - 2 * t) // smoothstep
+}
+
 interface SpawnerState {
   /** distance accumulated since the last row was spawned */
   sinceLastRow: number
@@ -39,23 +51,24 @@ export function nextObstacleId(): number {
 }
 
 /**
- * Row cadence (PRD §4.6): rows are spaced by `spawnGapStart` at base speed and
- * tighten as speed climbs, never closer than `spawnGapMin`.
+ * Row cadence (PRD §4.6), now distance-driven for a gentle on-ramp: rows are
+ * widely spaced (`spawnGapEarly`) just after warm-up and tighten toward
+ * `spawnGapMin` as difficulty climbs with distance.
  */
-export function currentGap(speed: number): number {
-  const tighten = (speed - CONFIG.speedStart) * CONFIG.spawnGapTighten
-  return Math.max(CONFIG.spawnGapMin, CONFIG.spawnGapStart - tighten)
+export function currentGap(distance: number): number {
+  return lerp(CONFIG.spawnGapEarly, CONFIG.spawnGapMin, difficultyAt(distance))
 }
 
 /**
  * Build one row of obstacles (PRD §4.6 fairness rule, mandatory):
  * block 1–2 lanes — NEVER all three — leaving at least one passable lane.
+ * `twoLaneChance` is how often a row blocks two lanes (low early, higher later).
  * Each blocked lane gets a random obstacle type. `rng` is injectable for tests.
  */
-export function makeRow(rng: () => number = Math.random): RowObstacle[] {
+export function makeRow(twoLaneChance = 0.5, rng: () => number = Math.random): RowObstacle[] {
   const laneCount = CONFIG.lanes.length // 3
   // 1 or 2 blocked lanes → always ≥1 open lane (fairness).
-  const blockCount = rng() < 0.5 ? 1 : 2
+  const blockCount = rng() < twoLaneChance ? 2 : 1
 
   // Pick `blockCount` distinct lanes via a partial Fisher–Yates shuffle.
   const lanes = Array.from({ length: laneCount }, (_, i) => i)
@@ -74,8 +87,8 @@ export function makeRow(rng: () => number = Math.random): RowObstacle[] {
  * Build a full row plan: obstacles + an optional coin run. Coins prefer OPEN
  * lanes (a lane with no obstacle this row), per the fairness rule (§4.6).
  */
-export function makeRowPlan(rng: () => number = Math.random): RowPlan {
-  const obstacles = makeRow(rng)
+export function makeRowPlan(twoLaneChance = 0.5, rng: () => number = Math.random): RowPlan {
+  const obstacles = makeRow(twoLaneChance, rng)
   const blocked = new Set(obstacles.map((o) => o.lane))
   const open = Array.from({ length: CONFIG.lanes.length }, (_, i) => i).filter(
     (l) => !blocked.has(l),
@@ -95,12 +108,18 @@ export function makeRowPlan(rng: () => number = Math.random): RowPlan {
  * the accumulated distance crosses the current gap, otherwise null. Keeps the
  * remainder so cadence stays smooth as the gap tightens (§8.4).
  */
-export function tickSpawner(dz: number, speed: number): RowPlan | null {
+export function tickSpawner(dz: number, distance: number): RowPlan | null {
+  // Gentle on-ramp: no obstacles until the player has eased into the run.
+  if (distance < CONFIG.spawnWarmup) {
+    spawner.sinceLastRow = 0
+    return null
+  }
   spawner.sinceLastRow += dz
-  const gap = currentGap(speed)
+  const gap = currentGap(distance)
   if (spawner.sinceLastRow >= gap) {
     spawner.sinceLastRow -= gap
-    return makeRowPlan()
+    const twoLaneChance = CONFIG.twoLaneMaxChance * difficultyAt(distance)
+    return makeRowPlan(twoLaneChance)
   }
   return null
 }
