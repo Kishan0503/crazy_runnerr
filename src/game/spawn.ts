@@ -23,11 +23,18 @@ const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 
 /**
- * Difficulty 0→1 as a function of distance covered. 0 right after warm-up, 1 at
- * `difficultyRampDistance`. Smoothstep so the increase feels organic, not linear.
+ * Density difficulty 0→1 as a function of distance covered.
+ *
+ * Held at 0 (sparse, fair: wide spacing + mostly single-lane rows) until
+ * `densityStartDistance` — which is the distance where speed reaches its cap.
+ * Progression is "speed first, then density": while speed is still ramping the
+ * track stays uncrowded; only once the player can't be sped up any further does
+ * density climb 0→1 over `difficultyRampDistance`. Smoothstep so it feels organic.
  */
 export function difficultyAt(distance: number): number {
-  const t = clamp01(distance / CONFIG.difficultyRampDistance)
+  const past = distance - CONFIG.densityStartDistance
+  if (past <= 0) return 0
+  const t = clamp01(past / CONFIG.difficultyRampDistance)
   return t * t * (3 - 2 * t) // smoothstep
 }
 

@@ -14,7 +14,7 @@ import { CONFIG } from './config'
 interface World {
   /** when false, the simulation is frozen (start screen, game over, pause) */
   running: boolean
-  /** current forward speed in units/sec, ramps speedStart → speedMax (§4.6) */
+  /** current forward speed in units/sec; set each frame from the distance tier */
   speed: number
   /** total distance the world has scrolled — basis for the score (§4.7) */
   distance: number

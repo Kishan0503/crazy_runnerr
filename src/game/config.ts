@@ -24,20 +24,30 @@ export const CONFIG = {
   laneLerp: 13, // higher = snappier lane switching
   slideLerp: 16, // squash/stretch easing for slide
 
-  speedStart: 16, // initial forward speed (units/sec)
-  speedRamp: 0.35, // speed gained per second
-  speedMax: 34, // speed cap
+  // ---- Speed: distance-stepped tiers, NOT continuous (§ updated mechanic) ----
+  // Base forward speed = the 1.0x tier. Speed steps up by `speedTierStep` each
+  // `speedTierDistance` metres, up to `speedMaxTier` multiplier, then holds flat.
+  // This trims reaction time as the player progresses WITHOUT overcrowding the
+  // track, and the cap guarantees the game stays playable on very long runs.
+  //   0–500m: 1.0x · 500–1000: 1.25x · 1000–1500: 1.5x · 1500–2000: 1.75x · 2000+: 2.0x
+  speedStart: 16, // forward speed at the 1.0x tier (units/sec)
+  speedTierDistance: 500, // metres per speed tier
+  speedTierStep: 0.25, // multiplier gained per tier (0.25 = +25%)
+  speedMaxTier: 2.0, // hard cap on the speed multiplier (reached at 2000m)
 
   spawnGapStart: 16, // distance between rows at base speed
   spawnGapMin: 9.5, // tightest row spacing
   spawnGapTighten: 0.25, // how much the gap shrinks per unit of extra speed
 
-  // Difficulty ramp (distance-driven). The start is deliberately sparse and
-  // eases up as the player gets further, so the game never feels hard at 0 m.
+  // ---- Difficulty ramp (density) — distance-driven, but held back until the
+  // speed cap so progression is "speed first, then density". Density is flat &
+  // fair (sparse spacing, mostly 1 blocked lane) for the whole speed-ramp phase,
+  // then row spacing tightens and two-lane rows grow once speed can rise no more.
   spawnWarmup: 12, // no obstacles for the first N metres (gentle on-ramp)
-  spawnGapEarly: 24, // row spacing right after warm-up (sparse, not empty)
-  difficultyRampDistance: 600, // metres over which density ramps to its peak
-  twoLaneMaxChance: 0.6, // peak probability a row blocks two lanes (1 lane early)
+  spawnGapEarly: 20, // row spacing while density is held (sparse, not empty)
+  densityStartDistance: 2000, // metres before density begins to ramp (= speed cap)
+  difficultyRampDistance: 1000, // metres over which density ramps after it starts
+  twoLaneMaxChance: 0.5, // peak probability a row blocks two lanes (1 lane while held)
 
   coinValue: 5, // score added per coin
   coinsPerRun: 3, // coins per spawned coin run
