@@ -100,11 +100,15 @@ export function StartScreen() {
     return () => clearTimeout(t)
   }, [ready])
 
-  // When the exit transition is requested, play it out then begin the run.
+  // When the exit transition is requested, the player rig plays the 180° turn
+  // and calls start() the instant it blends into the run (the intended trigger).
+  // This timer is only a SAFETY FALLBACK: if the rig can't run the turn (model
+  // missing / placeholder), start() still fires so the game never hangs. start()
+  // is idempotent, so whichever fires first wins.
   const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     if (!starting) return
-    exitTimer.current = setTimeout(() => start(), 560)
+    exitTimer.current = setTimeout(() => start(), 1300)
     return () => {
       if (exitTimer.current) clearTimeout(exitTimer.current)
     }

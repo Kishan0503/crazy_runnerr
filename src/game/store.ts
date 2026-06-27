@@ -74,6 +74,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   start: () => {
+    // Idempotent: the player rig (after the turn-to-run intro) and the
+    // start-screen fallback timer both call this; ignore once already playing.
+    const phase = get().phase
+    if (phase === 'playing') return
     freshRun() // sets world.running = true and bumps world.runId
     // Mirror the new runId into React state so the obstacle field remounts
     // synchronously and no obstacle from the previous run can survive a frame.
