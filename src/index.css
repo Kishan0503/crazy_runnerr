@@ -46,6 +46,14 @@ canvas {
   touch-action: none;
 }
 
+/* Every interactive button shows the hand cursor; disabled ones don't. */
+button:not(:disabled) {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
 /* ---------------------------------------------------------------------------
  * Reusable UI atoms (glass panels, neon button) — ref start/gameplay HUD.
  * ------------------------------------------------------------------------- */

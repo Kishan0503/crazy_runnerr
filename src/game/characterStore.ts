@@ -1,0 +1,115 @@
+import { create } from 'zustand'
+import {
+  buyWithCoinsRemote,
+  equipRemote,
+  fetchCatalog,
+  fetchOwned,
+  type Character,
+} from './characters'
+import { useAuthStore } from './auth'
+
+/**
+ * Character catalog + ownership + the equipped character.
+ *
+ *   - GUEST: sees the full catalog (public read) but only owns the FREE
+ *     character(s); equip persists to localStorage; buying requires login.
+ *   - AUTHED: owns whatever user_characters says; equip persists to
+ *     profiles.active_character_id; buying goes through the server RPC.
+ */
+
+const GUEST_ACTIVE_KEY = 'lane-runner:character'
+const DEFAULT_ID = 'runner'
+
+interface CharacterStore {
+  catalog: Character[]
+  owned: string[]
+  activeId: string
+  loading: boolean
+  /** (re)load catalog + ownership + equipped character for the current auth state */
+  load: () => Promise<void>
+  /** equip an owned character */
+  equip: (id: string) => Promise<void>
+  /** buy a coins-priced character; returns an error message or null */
+  buy: (id: string) => Promise<{ error: string | null }>
+  isOwned: (id: string) => boolean
+  activeCharacter: () => Character | undefined
+}
+
+const loadGuestActive = (): string => {
+  try {
+    return localStorage.getItem(GUEST_ACTIVE_KEY) || DEFAULT_ID
+  } catch {
+    return DEFAULT_ID
+  }
+}
+const saveGuestActive = (id: string) => {
+  try {
+    localStorage.setItem(GUEST_ACTIVE_KEY, id)
+  } catch {
+    /* ignore */
+  }
+}
+
+export const useCharacterStore = create<CharacterStore>((set, get) => ({
+  catalog: [],
+  owned: [DEFAULT_ID],
+  activeId: DEFAULT_ID,
+  loading: false,
+
+  load: async () => {
+    set({ loading: true })
+    const auth = useAuthStore.getState()
+    const catalog = await fetchCatalog()
+    const freeIds = catalog.filter((c) => c.currency === 'free').map((c) => c.id)
+
+    let owned: string[]
+    let activeId: string
+    if (auth.status === 'authed' && auth.user) {
+      owned = await fetchOwned(auth.user.id)
+      // Server may not have granted yet on first frame; always include free ones.
+      owned = Array.from(new Set([...freeIds, ...owned]))
+      activeId = auth.profile?.active_character_id ?? DEFAULT_ID
+    } else {
+      owned = freeIds.length ? freeIds : [DEFAULT_ID]
+      activeId = loadGuestActive()
+    }
+    // Never leave the player equipped with something they don't own.
+    if (!owned.includes(activeId)) activeId = owned[0] ?? DEFAULT_ID
+
+    set({ catalog, owned, activeId, loading: false })
+  },
+
+  equip: async (id) => {
+    if (!get().isOwned(id)) return
+    set({ activeId: id })
+    const auth = useAuthStore.getState()
+    if (auth.status === 'authed' && auth.user) {
+      // Keep the CACHED profile in sync with the DB write, otherwise the next
+      // load() (e.g. reopening the picker) would revert activeId to the stale
+      // cached active_character_id. (Was the "equipped character jumps" bug.)
+      if (auth.profile) {
+        useAuthStore.setState({ profile: { ...auth.profile, active_character_id: id } })
+      }
+      await equipRemote(auth.user.id, id)
+    } else {
+      saveGuestActive(id)
+    }
+  },
+
+  buy: async (id) => {
+    const { error } = await buyWithCoinsRemote(id)
+    if (error) return { error }
+    // Refresh server balance + ownership, then equip the new character.
+    await useAuthStore.getState().refresh()
+    const auth = useAuthStore.getState()
+    if (auth.user) {
+      const owned = Array.from(new Set([...get().owned, id, ...(await fetchOwned(auth.user.id))]))
+      set({ owned })
+    }
+    await get().equip(id)
+    return { error: null }
+  },
+
+  isOwned: (id) => get().owned.includes(id),
+  activeCharacter: () => get().catalog.find((c) => c.id === get().activeId),
+}))

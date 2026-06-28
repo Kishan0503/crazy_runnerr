@@ -1,10 +1,19 @@
 import { useEffect } from 'react'
 import { inputBus } from './input'
 import { useGameStore } from './store'
+import { activateAbility } from './ability'
 import type { Intent } from './types'
 
 /** Minimum touch travel to count as a swipe vs a tap (PRD §6). */
 const SWIPE_THRESHOLD = 24
+
+/** True when the user is typing in a form field — keep those keys out of the game. */
+function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  if (!el) return false
+  const tag = el.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
+}
 
 const KEY_MAP: Record<string, Intent> = {
   ArrowLeft: 'left',
@@ -31,6 +40,16 @@ export function useGameControls() {
     const onKeyDown = (e: KeyboardEvent) => {
       // Ignore auto-repeat so a held key doesn't spam lane switches.
       if (e.repeat) return
+      // Don't hijack keys while the user is typing in a form (login/signup).
+      if (isTypingTarget(e.target)) return
+      // Ability key (E): activate the equipped character's ability.
+      if (e.code === 'KeyE') {
+        if (isPlaying()) {
+          e.preventDefault()
+          activateAbility()
+        }
+        return
+      }
       const intent = KEY_MAP[e.code]
       if (!intent) return
       if (!isPlaying()) return

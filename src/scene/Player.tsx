@@ -10,6 +10,8 @@ import { applyIntent, stepPlayer } from '../game/player'
 import { player } from '../game/playerState'
 import { world } from '../game/world'
 import { useGameStore } from '../game/store'
+import { useCharacterStore } from '../game/characterStore'
+import { cosmeticTint } from '../game/characters'
 import { MODELS } from '../game/modelRegistry'
 import { ModelBoundary } from './Model'
 
@@ -189,7 +191,11 @@ function deformedWorldMinY(group: Group): number | null {
  * facing is correct regardless of any root motion baked into the clip.
  */
 function PlayerModel({ onMode }: { onMode: (mode: AnimMode) => void }) {
-  const { url, scale, rotationY = 0, tint } = MODELS.player
+  const { url, scale, rotationY = 0 } = MODELS.player
+  // Tint the model by the equipped character's cosmetic colour (visual distinction
+  // until each character has its own .glb). Updates live when you equip another.
+  const activeId = useCharacterStore((s) => s.activeId)
+  const tint = cosmeticTint(activeId)
   const { scene, animations } = useGLTF(url)
   const idleFbx = useFBX(IDLE_FBX)
   const turnFbx = useFBX(TURN_FBX)

@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import { useGameStore } from './store'
+import { useAuthUi } from '../ui/AuthModal'
+import { useCharacterUi } from '../ui/CharacterSelect'
 
 /**
  * Meta (non-gameplay) keyboard controls (PRD §6):
@@ -12,6 +14,15 @@ import { useGameStore } from './store'
 export function useMetaControls() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Ignore keys typed into a form field (login/signup) — they must not start
+      // or control the game.
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) {
+        return
+      }
+      // A modal is open (auth / character picker) → no key starts the game.
+      if (useAuthUi.getState().open || useCharacterUi.getState().open) return
+
       const { phase, start, beginStart, pause, resume } = useGameStore.getState()
 
       if (e.code === 'Enter' || e.code === 'Space') {

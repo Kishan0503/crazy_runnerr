@@ -3,7 +3,10 @@ import { resetWorld, world } from './world'
 import { resetPlayer } from './playerState'
 import { resetSpawner } from './spawn'
 import { inputBus } from './input'
-import { loadBest, loadWallet, saveBest, saveWallet } from './storage'
+import { loadBest, loadWallet } from './storage'
+import { recordRun } from './progress'
+import { resetAbility } from './ability'
+import { useCharacterStore } from './characterStore'
 
 /** Game phase state machine (PRD §5): START → PLAYING → GAME_OVER → (PLAYING…). */
 export type Phase = 'start' | 'playing' | 'paused' | 'gameover'
@@ -39,6 +42,8 @@ interface GameStore {
   quit: () => void
   /** player picked up a coin (discrete event — safe for React state) */
   collectCoin: () => void
+  /** push server-synced totals into the store (called after login / refresh) */
+  setSyncedProgress: (best: number, wallet: number) => void
 }
 
 /** Reset all per-run runtime so nothing leaks between runs (§4 acceptance). */
@@ -47,6 +52,8 @@ function freshRun() {
   resetPlayer()
   resetSpawner()
   inputBus.clear()
+  // Arm the equipped character's ability for this run (charges reset to max).
+  resetAbility(useCharacterStore.getState().activeCharacter()?.ability_id ?? null)
 }
 
 /** Stop the world without starting a run (start screen / quit). */
@@ -88,12 +95,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (get().phase !== 'playing') return
     world.running = false // freeze the simulation (everything moves by world.dz)
     const distance = Math.floor(world.distance)
+    const coins = get().coins
+    // Optimistic UI: show the new totals immediately. Persistence (localStorage
+    // for guests, the record_run RPC for authed users) happens in recordRun;
+    // for authed users its refresh() then corrects these via setSyncedProgress.
     const best = Math.max(get().best, distance)
-    if (best > get().best) saveBest(best)
-    // Bank this run's coins into the persistent wallet (start-screen total).
-    const wallet = get().wallet + get().coins
-    saveWallet(wallet)
+    const wallet = get().wallet + coins
     set({ phase: 'gameover', best, lastDistance: distance, wallet })
+    void recordRun(distance, coins, useCharacterStore.getState().activeId)
   },
 
   pause: () => {
@@ -114,6 +123,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   collectCoin: () => set((s) => ({ coins: s.coins + 1 })),
+
+  setSyncedProgress: (best, wallet) => set({ best, wallet }),
 }))
 
 /** Total score = distance + a flat bonus per coin (§4.7). Computed, not stored. */

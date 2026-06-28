@@ -13,6 +13,11 @@ dist-ssr
 *.local
 .claude
 
+# Environment / secrets — keep real keys out of git. .env.example IS committed.
+.env
+.env.*
+!.env.example
+
 # Heavy source 3D models (25–36MB each). The optimized, web-ready versions
 # live in public/models/ and ARE committed. Keep originals local only.
 /models/

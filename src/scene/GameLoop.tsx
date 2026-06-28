@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber'
 import { CONFIG } from '../game/config'
 import { world } from '../game/world'
+import { tickAbility } from '../game/ability'
 
 /**
  * Speed multiplier for a given distance — distance-STEPPED tiers (not continuous).
@@ -37,6 +38,9 @@ export function GameLoop() {
 
     world.dz = world.speed * dt
     world.distance += world.dz
+
+    // Advance the active character ability's effect timer (e.g. Magnet).
+    tickAbility(dt)
   })
 
   return null

@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useGameStore } from '../game/store'
+import { useAuthStore } from '../game/auth'
+import { useCharacterStore } from '../game/characterStore'
+import { cosmeticTint } from '../game/characters'
+import { useAuthUi } from './AuthModal'
+import { useCharacterUi } from './CharacterSelect'
 
 /* ----------------------------- inline icons ------------------------------ */
 function CoinIcon({ className = '' }: { className?: string }) {
@@ -55,6 +60,81 @@ function ArrowGlyph({ dir }: { dir: 'left' | 'up' | 'down' }) {
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: `rotate(${rot}deg)` }} aria-hidden="true">
       <path d="M19 12H5M5 12l6-6M5 12l6 6" />
     </svg>
+  )
+}
+
+function UserGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20c0-3.5 3.6-6 8-6s8 2.5 8 6" />
+    </svg>
+  )
+}
+
+/**
+ * Account control (top bar). Guest → a "Log In" button that opens the auth
+ * modal. Logged in → the display name (or "Player") with a Log Out action.
+ */
+function AccountControl() {
+  const status = useAuthStore((s) => s.status)
+  const profile = useAuthStore((s) => s.profile)
+  const signOut = useAuthStore((s) => s.signOut)
+  const openModal = useAuthUi((s) => s.openModal)
+
+  if (status === 'authed') {
+    const name = profile?.display_name || 'Player'
+    return (
+      <div className="cr-panel flex items-center gap-2 py-1.5 pl-3 pr-1.5">
+        <span className="text-white/80"><UserGlyph /></span>
+        <span className="max-w-[7rem] truncate text-sm font-semibold text-white">{name}</span>
+        <button
+          type="button"
+          onClick={() => signOut()}
+          className="cr-label ml-1 rounded-lg px-2 py-1 hover:text-white/90 hover:underline"
+        >
+          Log Out
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => openModal()}
+      className="cr-panel flex items-center gap-2 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10"
+    >
+      <UserGlyph />
+      Log In
+    </button>
+  )
+}
+
+/** Clickable "Character" cell on the start screen — opens the picker. */
+function CharacterCard() {
+  const activeId = useCharacterStore((s) => s.activeId)
+  const active = useCharacterStore((s) => s.activeCharacter())
+  const openPicker = useCharacterUi((s) => s.openModal)
+  const name = active?.name ?? 'Runner'
+  return (
+    <button
+      type="button"
+      onClick={() => openPicker()}
+      className="pointer-events-auto flex items-center gap-3 px-5 py-3 text-left transition hover:bg-white/5"
+    >
+      <span
+        className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--cr-panel-border)]"
+        style={{ background: cosmeticTint(activeId), boxShadow: `0 0 10px ${cosmeticTint(activeId)}66` }}
+      />
+      <div>
+        <div className="cr-label !text-[0.55rem]">Character</div>
+        <div className="flex items-center gap-1 text-sm font-semibold text-white">
+          {name}
+          <span className="text-[0.6rem] text-[var(--cr-blue-bright)]">▸ change</span>
+        </div>
+      </div>
+    </button>
   )
 }
 
@@ -137,6 +217,7 @@ export function StartScreen() {
         </div>
 
         <div className={`flex items-center gap-2.5 ${reveal(0)}`} style={style(0)}>
+          <AccountControl />
           <button type="button" aria-label="Leaderboard" className="cr-icon-btn h-10 w-10 rounded-xl">
             <TrophyGlyph />
           </button>
@@ -159,8 +240,11 @@ export function StartScreen() {
         <div className="mt-1"><CrownGlyph /></div>
       </div>
 
-      {/* Center stack — nudged up so the runner/track below stays uncluttered */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center -translate-y-[9vh] sm:-translate-y-[11vh]">
+      {/* Center stack — nudged up so the runner/track below stays uncluttered.
+          pointer-events-none so this full-screen layer doesn't swallow clicks
+          meant for the top-bar buttons behind it; interactive children (the Play
+          button) re-enable pointer events themselves. */}
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-6 text-center -translate-y-[9vh] sm:-translate-y-[11vh]">
         <p className={`cr-label !tracking-[0.32em] ${reveal(0)}`} style={style(0)}>
           How far can you go?
         </p>
@@ -177,27 +261,19 @@ export function StartScreen() {
         <button
           type="button"
           onClick={() => beginStart()}
-          className={`cr-play mt-7 flex items-center gap-3 px-9 py-4 text-lg ${reveal(3)}`}
+          className={`cr-play pointer-events-auto mt-7 flex items-center gap-3 px-9 py-4 text-lg ${reveal(3)}`}
           style={style(3)}
         >
           <PlayGlyph />
           Play Now
         </button>
 
-        {/* Currently selected character + track (static info card) */}
+        {/* Selected character (opens the picker) + track */}
         <div
           className={`cr-panel mt-7 flex items-stretch divide-x divide-[var(--cr-panel-border)] ${reveal(4)}`}
           style={style(4)}
         >
-          <div className="flex items-center gap-3 px-5 py-3 text-left">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--cr-panel-border)] bg-white/5 text-[10px] font-bold text-white/80">
-              P1
-            </span>
-            <div>
-              <div className="cr-label !text-[0.55rem]">Character</div>
-              <div className="text-sm font-semibold text-white">Runner</div>
-            </div>
-          </div>
+          <CharacterCard />
           <div className="flex items-center gap-3 px-5 py-3 text-left">
             <span
               className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--cr-panel-border)]"

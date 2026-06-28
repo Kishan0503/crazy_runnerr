@@ -1,10 +1,11 @@
 import { useCallback, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import type { Group } from 'three'
+import { Group, MathUtils } from 'three'
 import { CONFIG } from '../game/config'
 import type { ObstacleKind } from '../game/config'
 import { world } from '../game/world'
 import { player } from '../game/playerState'
+import { isMagnetActive } from '../game/ability'
 import { collectsCoin, hits } from '../game/collisions'
 import { nextObstacleId, tickSpawner } from '../game/spawn'
 import { useGameStore } from '../game/store'
@@ -75,17 +76,35 @@ function ActiveCoin({
 }: ActiveCoinData & { onRemove: (id: number) => void }) {
   const ref = useRef<Group>(null)
   const z = useRef(CONFIG.spawnZ - runIndex * COIN_SPACING)
+  const x = useRef<number>(CONFIG.lanes[lane])
   const collectCoin = useGameStore((s) => s.collectCoin)
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!world.running) return
+    const dt = Math.min(delta, 0.05)
 
     z.current += world.dz
-    const g = ref.current
-    if (g) g.position.z = z.current
 
-    // Collected on lane + depth overlap, regardless of jump/slide pose (§4.5).
-    if (collectsCoin(player, lane, z.current)) {
+    // Magnet ability: pull nearby coins (any lane) toward the player, then they
+    // get collected by the wider magnet check below (§ ability: magnet).
+    const magnet = isMagnetActive()
+    if (magnet && z.current > CONFIG.runnerZ - 28 && z.current < CONFIG.recycleZ + 2) {
+      x.current = MathUtils.damp(x.current, player.x, 9, dt)
+      z.current = MathUtils.damp(z.current, CONFIG.runnerZ, 7, dt)
+    }
+
+    const g = ref.current
+    if (g) {
+      g.position.x = x.current
+      g.position.z = z.current
+    }
+
+    // Magnet active → collect by 3D proximity (lane-independent); otherwise the
+    // normal lane + depth overlap (§4.5).
+    const collected = magnet
+      ? Math.abs(x.current - player.x) < 0.7 && Math.abs(z.current - CONFIG.runnerZ) < 0.9
+      : collectsCoin(player, lane, z.current)
+    if (collected) {
       collectCoin()
       onRemove(id)
       return
@@ -95,7 +114,7 @@ function ActiveCoin({
   })
 
   return (
-    <group ref={ref} position={[CONFIG.lanes[lane], 0, z.current]}>
+    <group ref={ref} position={[x.current, 0, z.current]}>
       <Coin />
     </group>
   )

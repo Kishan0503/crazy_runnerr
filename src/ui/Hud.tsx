@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { world } from '../game/world'
 import { CONFIG } from '../game/config'
 import { scoreOf, useGameStore } from '../game/store'
+import { activateAbility, getAbilitySnapshot } from '../game/ability'
 
 function CoinIcon() {
   return (
@@ -26,6 +27,69 @@ function SwipeHand() {
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11M12 11V4.5a1.5 1.5 0 0 1 3 0V11M15 11V6.5a1.5 1.5 0 0 1 3 0V13c0 3.5-1.5 7-5 7h-1.5c-2 0-3-1-4-2.5L6 14a1.4 1.4 0 0 1 2.3-1.6L9 13V8.5a1.5 1.5 0 0 1 3 0" />
     </svg>
+  )
+}
+
+/**
+ * Equipped-character ability control (HUD). Shows the ability name, charges left,
+ * and an active countdown; tap (or press E) to activate. Hidden when the equipped
+ * character has no ability. Polls the ability singleton on a rAF but only
+ * re-renders when the meaningful state changes (charges / active / whole seconds).
+ */
+function AbilityButton() {
+  const [snap, setSnap] = useState(getAbilitySnapshot())
+  useEffect(() => {
+    let raf = 0
+    let prevKey = ''
+    const tick = () => {
+      const s = getAbilitySnapshot()
+      const key = `${s.id}|${s.charges}|${s.active}|${Math.ceil(s.timeLeft)}`
+      if (key !== prevKey) {
+        prevKey = key
+        setSnap(s)
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  if (!snap.id) return null // equipped character has no ability
+  const disabled = snap.charges <= 0 || snap.active
+
+  return (
+    <div className="pointer-events-none absolute bottom-24 left-1/2 -translate-x-1/2">
+      <button
+        type="button"
+        onClick={() => activateAbility()}
+        disabled={disabled}
+        aria-label={`Activate ${snap.name}`}
+        className={`pointer-events-auto flex flex-col items-center gap-1 rounded-2xl border px-5 py-2.5 backdrop-blur-sm transition active:scale-95 ${
+          snap.active
+            ? 'border-[var(--cr-blue-bright)] bg-[var(--cr-blue)]/30'
+            : disabled
+              ? 'border-white/10 bg-white/5 opacity-60'
+              : 'border-[var(--cr-blue-bright)]/60 bg-white/10 hover:bg-white/15'
+        }`}
+      >
+        <span className="text-sm font-bold uppercase tracking-wide text-white">
+          {snap.active ? `${snap.name} ${Math.ceil(snap.timeLeft)}s` : snap.name}
+        </span>
+        <span className="flex items-center gap-1">
+          {Array.from({ length: snap.maxCharges }, (_, i) => (
+            <span
+              key={i}
+              className={`h-1.5 w-4 rounded-full ${
+                i < snap.charges ? 'bg-[var(--cr-blue-bright)]' : 'bg-white/20'
+              }`}
+            />
+          ))}
+          <span className="ml-1 text-[0.6rem] font-semibold uppercase tracking-wider text-white/50">
+            Tap / E
+          </span>
+        </span>
+      </button>
+    </div>
   )
 }
 
@@ -153,6 +217,9 @@ export function Hud() {
           </div>
         </div>
       </div>
+
+      {/* Bottom-center: equipped-character ability control */}
+      <AbilityButton />
     </div>
   )
 }
