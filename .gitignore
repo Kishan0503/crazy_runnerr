@@ -18,6 +18,13 @@ dist-ssr
 .env.*
 !.env.example
 
+# Character assets — raw source (heavy FBX/GLB) + pipeline output. The final,
+# optimized GLBs live in Supabase Storage, not the repo. Keep a separate backup
+# of the raw source; it's needed to rebuild a character.
+/characters/
+/dist-characters/
+/raw/
+
 # Heavy source 3D models (25–36MB each). The optimized, web-ready versions
 # live in public/models/ and ARE committed. Keep originals local only.
 /models/

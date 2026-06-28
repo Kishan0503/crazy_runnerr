@@ -37,5 +37,10 @@ export const MODELS: Record<ModelSlot, ModelEntry> = {
   obstacle_block: { url: '/models/obstacle_block.glb', scale: [0.82, 1.22, 0.46], rotationY: 0, tint: '#bd7b34' },
 }
 
-// Preload so models are ready before play begins (PRD §13).
-for (const entry of Object.values(MODELS)) useGLTF.preload(entry.url)
+// Preload OBSTACLE models so they're ready before play begins (PRD §13). The
+// player model is NOT preloaded here any more — it's catalog-driven and loaded
+// per equipped character (see characterStore), so we never eagerly fetch a
+// character glb the player isn't using.
+for (const [slot, entry] of Object.entries(MODELS)) {
+  if (slot !== 'player') useGLTF.preload(entry.url)
+}

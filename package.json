@@ -33,6 +33,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/three": "^0.184.1",
     "@vitejs/plugin-react": "^6.0.2",
+    "fbx2gltf": "^0.9.7-p1",
     "oxlint": "^1.69.0",
     "tailwindcss": "^4.3.1",
     "typescript": "~6.0.2",

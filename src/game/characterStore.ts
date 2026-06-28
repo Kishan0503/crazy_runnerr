@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useGLTF } from '@react-three/drei'
 import {
   buyWithCoinsRemote,
   equipRemote,
@@ -7,6 +8,12 @@ import {
   type Character,
 } from './characters'
 import { useAuthStore } from './auth'
+
+/** Warm the GPU/network cache for a character's model so equipping/playing is
+ *  instant. Lazy — we only ever preload models the player actually selects. */
+function preloadModel(url: string | null | undefined) {
+  if (url) useGLTF.preload(url)
+}
 
 /**
  * Character catalog + ownership + the equipped character.
@@ -77,11 +84,14 @@ export const useCharacterStore = create<CharacterStore>((set, get) => ({
     if (!owned.includes(activeId)) activeId = owned[0] ?? DEFAULT_ID
 
     set({ catalog, owned, activeId, loading: false })
+    // Warm the equipped character's model so the first run starts instantly.
+    preloadModel(catalog.find((c) => c.id === activeId)?.model_url)
   },
 
   equip: async (id) => {
     if (!get().isOwned(id)) return
     set({ activeId: id })
+    preloadModel(get().catalog.find((c) => c.id === id)?.model_url)
     const auth = useAuthStore.getState()
     if (auth.status === 'authed' && auth.user) {
       // Keep the CACHED profile in sync with the DB write, otherwise the next

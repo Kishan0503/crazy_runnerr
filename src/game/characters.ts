@@ -11,6 +11,9 @@ export interface Character {
   price_cents: number
   rarity: string
   model_url: string | null
+  thumbnail_url: string | null
+  model_scale: number
+  model_offset_y: number
   sort_order: number
 }
 
@@ -38,12 +41,15 @@ const FALLBACK_CATALOG: Character[] = [
     price_cents: 0,
     rarity: 'common',
     model_url: '/models/player.glb',
+    thumbnail_url: null,
+    model_scale: 0.72,
+    model_offset_y: 0,
     sort_order: 0,
   },
 ]
 
 const SELECT =
-  'id,name,description,ability_id,currency,price_coins,price_cents,rarity,model_url,sort_order'
+  'id,name,description,ability_id,currency,price_coins,price_cents,rarity,model_url,thumbnail_url,model_scale,model_offset_y,sort_order'
 
 /** Public catalog (readable by guests via RLS). Falls back if no backend. */
 export async function fetchCatalog(): Promise<Character[]> {

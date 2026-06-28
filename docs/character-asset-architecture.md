@@ -160,8 +160,15 @@ Add `dist-characters/` and `raw/` to `.gitignore` (heavy, not committed).
 - Add a helper that preloads a character glb: `useGLTF.preload(url)`.
 - Call it when a character is **equipped** (and optionally on picker hover) so the model is warm before the run starts. Never preload the whole roster.
 
-### 4e. Picker uses thumbnails — `src/ui/CharacterSelect.tsx`
-- Replace the CSS `Avatar` with `<img src={character.thumbnail_url}>` (lazy, `loading="lazy"`), falling back to the tinted avatar if no thumbnail.
+### 4e. Picker = live hero preview + thumbnail strip — `src/ui/CharacterSelect.tsx`
+- **Hero stage:** a single small R3F canvas showing the **selected** character's
+  model playing its **idle** clip (loads that one glb on demand, plays idle). This
+  is the "wow" / upsell moment.
+- **Strip:** the horizontal list uses lightweight `thumbnail_url` images
+  (`<img loading="lazy">`), falling back to the tinted avatar if absent. Tapping a
+  thumbnail selects it → the hero stage swaps to that character.
+- **Only ONE character is rendered live at a time** (the selected one), so the
+  picker stays fast regardless of roster size — never render the whole roster live.
 
 **Acceptance:** only the equipped character's glb is fetched (check Network tab); switching characters swaps the model; picker shows images without loading any glb.
 

@@ -1,8 +1,7 @@
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { useAnimations, useFBX, useGLTF } from '@react-three/drei'
-import { Group, LoopOnce, LoopRepeat, MathUtils, Mesh, MeshStandardMaterial, SkinnedMesh, Vector3 } from 'three'
-import type { AnimationClip } from 'three'
+import { useAnimations, useGLTF } from '@react-three/drei'
+import { Box3, Group, LoopOnce, LoopRepeat, MathUtils, Mesh, SkinnedMesh, Vector3 } from 'three'
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js'
 import { CONFIG, PLAYER_SIZE } from '../game/config'
 import { inputBus } from '../game/input'
@@ -11,16 +10,17 @@ import { player } from '../game/playerState'
 import { world } from '../game/world'
 import { useGameStore } from '../game/store'
 import { useCharacterStore } from '../game/characterStore'
-import { cosmeticTint } from '../game/characters'
-import { MODELS } from '../game/modelRegistry'
 import { ModelBoundary } from './Model'
 
-/** External Mixamo clips (same mixamorig* skeleton as player.glb, so they bind
- *  by bone name with no retargeting). Renamed on import to stable slot names. */
-const IDLE_FBX = '/idle.fbx'
-const TURN_FBX = '/running_turn_180.fbx'
-useFBX.preload(IDLE_FBX)
-useFBX.preload(TURN_FBX)
+/**
+ * Facing offset applied to the model node so it faces DOWN THE TRACK (−Z) during
+ * the run. Characters built through our pipeline share the same authored facing,
+ * so this is one constant; the start-screen idle faces the camera (this + π).
+ * Tune once if a character imports backwards.
+ */
+const BASE_FACING = Math.PI
+/** Used only if the equipped character has no model_url yet. */
+const FALLBACK_MODEL = '/models/player.glb'
 
 type AnimMode = 'procedural' | 'clips'
 
@@ -141,9 +141,8 @@ function matchClips(names: string[]) {
     run: find('run', 'sprint', 'jog'),
     jump: find('jump', 'leap'),
     slide: find('slide', 'roll', 'duck', 'crouch'),
-    // Prefer the new start-screen idle FBX; fall back to the glb's own idle.
-    idle: find('idle180') ?? find('idle', 'stand', 'tpose'),
-    turn: find('turn180'),
+    idle: find('idle', 'stand', 'tpose'),
+    turn: find('turn180', 'turn'),
   }
 }
 
@@ -158,22 +157,37 @@ function matchClips(names: string[]) {
  * in WORLD (not group-local) keeps the correction stable — re-measuring after the
  * nudge yields ~0, so it converges instead of running away.
  */
+/**
+ * World-space bounding box of a skinned model under its CURRENT animated pose.
+ *
+ * Box3.setFromObject reads bind-pose geometry; we need the LIVE skinned pose, so
+ * we walk the skinned vertices with getVertexPosition. Critically we call
+ * skeleton.update() first — otherwise the bone matrices are stale and the box is
+ * wrong (this was silently breaking the auto-fit). Returns null if no skinned
+ * mesh / empty.
+ */
 const _v = new Vector3()
-function deformedWorldMinY(group: Group): number | null {
-  let minY = Infinity
+const _box = new Box3()
+function posedWorldBox(group: Group): Box3 | null {
+  _box.makeEmpty()
   group.updateWorldMatrix(true, true)
   group.traverse((o) => {
     const sk = o as SkinnedMesh
     if (!sk.isSkinnedMesh) return
+    sk.skeleton.update() // refresh bone matrices so the pose is current
     const pos = sk.geometry.getAttribute('position')
     for (let i = 0; i < pos.count; i++) {
-      sk.getVertexPosition(i, _v) // skinned (deformed) vertex, in sk-local space
-      sk.localToWorld(_v) // → world
-      if (_v.y < minY) minY = _v.y
+      sk.getVertexPosition(i, _v)
+      sk.localToWorld(_v)
+      _box.expandByPoint(_v)
     }
   })
-  return Number.isFinite(minY) ? minY : null
+  return _box.isEmpty() ? null : _box
 }
+
+/** Target rendered height (units) for the in-game character — matches the hitbox
+ *  and the old character's on-screen size, so any source model normalizes to it. */
+const GAME_TARGET_H = 1.5
 
 /**
  * Loads player.glb plus the two external Mixamo clips (idle + 180° turn) and
@@ -191,79 +205,57 @@ function deformedWorldMinY(group: Group): number | null {
  * facing is correct regardless of any root motion baked into the clip.
  */
 function PlayerModel({ onMode }: { onMode: (mode: AnimMode) => void }) {
-  const { url, scale, rotationY = 0 } = MODELS.player
-  // Tint the model by the equipped character's cosmetic colour (visual distinction
-  // until each character has its own .glb). Updates live when you equip another.
-  const activeId = useCharacterStore((s) => s.activeId)
-  const tint = cosmeticTint(activeId)
+  // Catalog-driven: load whatever the EQUIPPED character's model_url points at
+  // (Supabase Storage or a local path). Each character glb bakes all five clips
+  // (idle/run/jump/slide/turn180), so there's no runtime FBX merge any more.
+  const url = useCharacterStore((s) => s.activeCharacter()?.model_url) ?? FALLBACK_MODEL
+  const modelScale = useCharacterStore((s) => s.activeCharacter()?.model_scale) ?? 1
   const { scene, animations } = useGLTF(url)
-  const idleFbx = useFBX(IDLE_FBX)
-  const turnFbx = useFBX(TURN_FBX)
   const ref = useRef<Group>(null)
 
-  // Clone (SkeletonUtils preserves skinning, so a future rigged model works).
+  // Clone (SkeletonUtils preserves skinning). The model keeps its own baked
+  // textures/materials — no tinting.
   const object = useMemo(() => {
     const c = cloneSkeleton(scene)
     c.traverse((o) => {
       const mesh = o as Mesh
-      if (!mesh.isMesh) return
-      mesh.castShadow = true
-      const mat = (mesh.material as MeshStandardMaterial).clone()
-      if (tint) mat.color.set(tint)
-      mesh.material = mat
+      if (mesh.isMesh) mesh.castShadow = true
     })
     return c
-  }, [scene, tint])
+  }, [scene])
 
-  // Merge the glb clips with the imported FBX clips, renamed to stable slot
-  // names. Their tracks target mixamorig* bones — the same names as player.glb's
-  // skeleton — so useAnimations binds them with no retargeting.
-  const allClips = useMemo<AnimationClip[]>(() => {
-    const out: AnimationClip[] = [...animations]
-    const idleClip = idleFbx.animations[0]
-    if (idleClip) {
-      const c = idleClip.clone()
-      c.name = 'idle180'
-      out.push(c)
-    }
-    const turnClip = turnFbx.animations[0]
-    if (turnClip) {
-      const c = turnClip.clone()
-      c.name = 'turn180'
-      out.push(c)
-    }
-    return out
-  }, [animations, idleFbx, turnFbx])
-
-  const { actions, names } = useAnimations(allClips, ref)
-  const hasClips = allClips.length > 0
+  const { actions, names } = useAnimations(animations, ref)
+  const hasClips = animations.length > 0
   const clips = useMemo(() => matchClips(names), [names])
   const current = useRef('')
 
-  // Facing: the run pose faces down the track (the model's authored rotationY).
-  // The start-screen idle faces the camera — a half-turn off that.
+  const rotationY = BASE_FACING
+  // Facing: run faces down the track (−Z); the start-screen idle faces the camera.
   const faceTrack = rotationY
   const faceCamera = rotationY - Math.PI
   const yaw = useRef(faceCamera) // boots on the start screen, facing the player
   const turning = useRef(false) // mid 180° turn (after Play Now)
   const groundFrames = useRef(0) // frames left to re-seat feet on the ground
+  const normalized = useRef(false) // size auto-normalized for this model yet?
 
   useEffect(() => {
     onMode(hasClips ? 'clips' : 'procedural')
   }, [hasClips, onMode])
 
-  // Reset transform, hide the model, and arm the ground snap. We keep the model
-  // INVISIBLE until it has been posed by the mixer and seated on the ground, so
-  // the user never sees the bind-pose / pre-ground flash — see the snap in
-  // useFrame, which flips visibility on once the feet are grounded.
+  // Reset transform, hide the model, and arm the auto-fit. The model stays
+  // INVISIBLE until it's been size-normalized AND grounded, so the user never
+  // sees a wrong-scale / pre-ground flash. On a character switch (object change)
+  // we reset scale to 1 and re-run the fit — see the useFrame block below.
   useLayoutEffect(() => {
     const g = ref.current
     if (!g) return
     g.visible = false
+    g.scale.setScalar(1)
     g.rotation.y = yaw.current
     g.position.y = 0
-    groundFrames.current = 12 // re-snap for the first frames, after the clip poses
-  }, [object, scale, rotationY])
+    normalized.current = false
+    groundFrames.current = 16
+  }, [object, modelScale])
 
   // Cross-fade between clips and drive the start-screen turn choreography.
   useFrame((_, delta) => {
@@ -332,29 +324,35 @@ function PlayerModel({ onMode }: { onMode: (mode: AnimMode) => void }) {
     if (!g) return
     g.rotation.y = yaw.current
 
-    // Seat the feet on the world ground plane using the LIVE skinned pose (the
-    // glb root has an offset, so y=0 alone sinks it). Only while frozen on the
-    // start screen — never mid-run, where the feet legitimately rise/fall — and
-    // only for the first frames after (re)mount, once the mixer has posed the
-    // rig. World-space measure converges (post-nudge it re-reads ~0). 30k verts,
-    // so this is intentionally short-lived, not a per-frame cost.
-    if (groundFrames.current > 0 && !world.running) {
-      const worldMinY = deformedWorldMinY(g)
-      if (worldMinY != null) {
-        g.position.y -= worldMinY
-        // Posed AND grounded now — safe to reveal (no bind-pose flash).
-        g.visible = true
+    // ---- Auto-fit (size-normalize + ground) using the LIVE posed bounds ----
+    // Characters come in wildly different scales (Rookie ~0.02 units, Runner
+    // ~1.9), so we normalize EVERY model to GAME_TARGET_H from its measured posed
+    // height; model_scale is only a fine-tune multiplier. Then we seat the feet
+    // on y=0. Runs for the first frames after (re)mount; grounding only while
+    // frozen (mid-run the feet legitimately rise/fall). Reveal once both are done.
+    // One-time normalize (any state — handles an instant Play).
+    if (!normalized.current) {
+      const box = posedWorldBox(g)
+      if (box) {
+        const h = box.max.y - box.min.y
+        if (h > 1e-4) {
+          g.scale.setScalar((GAME_TARGET_H / h) * modelScale)
+          normalized.current = true
+        }
       }
+    }
+    if (normalized.current && groundFrames.current > 0 && !world.running) {
+      const box = posedWorldBox(g)
+      if (box) g.position.y -= box.min.y
       groundFrames.current--
-    } else if (!g.visible) {
-      // If the run started before the snap ran (e.g. autoplay), reveal anyway.
+      g.visible = true
+    } else if (normalized.current && !g.visible) {
       g.visible = true
     }
   })
 
-  const s3: [number, number, number] = Array.isArray(scale) ? scale : [scale, scale, scale]
   return (
-    <group ref={ref} scale={s3}>
+    <group ref={ref}>
       <primitive object={object} />
     </group>
   )
