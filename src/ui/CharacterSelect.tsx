@@ -203,6 +203,14 @@ const RARITY_COLOR: Record<string, string> = {
   premium: 'text-fuchsia-300',
 }
 
+/** Rarity → glow color (drives the --glow CSS var behind each thumbnail). */
+const RARITY_GLOW: Record<string, string> = {
+  common: 'rgba(226, 232, 240, 0.55)', // white
+  rare: 'rgba(168, 85, 247, 0.7)', // purple
+  premium: 'rgba(245, 178, 31, 0.75)', // gold
+}
+const rarityGlow = (rarity?: string) => RARITY_GLOW[rarity ?? 'common'] ?? RARITY_GLOW.common
+
 export function CharacterSelect() {
   const open = useCharacterUi((s) => s.open)
   const close = useCharacterUi((s) => s.closeModal)
@@ -218,6 +226,15 @@ export function CharacterSelect() {
   const [selectedId, setSelectedId] = useState(activeId)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Transient reward feedback: which card just got equipped/bought, so we can
+  // play a one-shot animation. Cleared by a timer after the animation length.
+  const [feedback, setFeedback] = useState<{ id: string; kind: 'equip' | 'buy' } | null>(null)
+  const fbTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const flash = (id: string, kind: 'equip' | 'buy') => {
+    if (fbTimer.current) clearTimeout(fbTimer.current)
+    setFeedback({ id, kind })
+    fbTimer.current = setTimeout(() => setFeedback(null), 700)
+  }
 
   // On open: refresh catalog/ownership and focus the equipped character.
   useEffect(() => {
@@ -236,13 +253,23 @@ export function CharacterSelect() {
   const abilityName =
     selected?.ability_id ? (ABILITY_DEFS[selected.ability_id]?.name ?? selected.ability_id) : null
 
+  const onEquip = (c: Character) => {
+    equip(c.id)
+    flash(c.id, 'equip')
+  }
+
   const onBuy = async (c: Character) => {
     if (status !== 'authed') return openAuth()
     setBusyId(c.id)
     setError(null)
     const { error } = await buy(c.id)
-    if (error) setError(prettyBuyError(error))
     setBusyId(null)
+    if (error) {
+      setError(prettyBuyError(error))
+    } else {
+      // buy() also equips on success — celebrate with the gold shimmer.
+      flash(c.id, 'buy')
+    }
   }
 
   return (
@@ -266,6 +293,19 @@ export function CharacterSelect() {
       <div className="flex min-h-0 flex-1 flex-col items-center px-5">
         <div className="relative h-[42vh] w-full max-w-md">
           {selected?.model_url ? <CharacterPreview url={selected.model_url} /> : null}
+          {/* One-shot reward glow over the hero on equip/buy. Keyed so it
+              remounts (and replays) each time; never touches the canvas. */}
+          {feedback && selected && feedback.id === selected.id && (
+            <span
+              key={`${feedback.id}-${feedback.kind}`}
+              className="pointer-events-none absolute inset-0 cr-hero-pulse"
+              style={{
+                background: `radial-gradient(60% 60% at 50% 55%, ${
+                  feedback.kind === 'buy' ? 'rgba(255,216,120,0.35)' : rarityGlow(selected.rarity)
+                }, transparent 70%)`,
+              }}
+            />
+          )}
         </div>
 
         <div className="mt-1 text-center">
@@ -288,7 +328,7 @@ export function CharacterSelect() {
               isActive ? (
                 <div className="w-full rounded-xl bg-white/10 py-3 text-center text-sm font-bold text-white/70">Equipped</div>
               ) : (
-                <button type="button" onClick={() => equip(selected.id)} className="cr-play w-full justify-center py-3 text-base">Equip</button>
+                <button type="button" onClick={() => onEquip(selected)} className="cr-play w-full justify-center py-3 text-base">Equip</button>
               )
             ) : selected.currency === 'coins' ? (
               <button
@@ -309,28 +349,41 @@ export function CharacterSelect() {
         </div>
       </div>
 
-      {/* Thumbnail strip — larger cards, centered, horizontal scroll */}
-      <div className="overflow-x-auto p-5 [scrollbar-width:thin]">
-        <div className="mx-auto flex w-fit gap-4">
+      {/* Thumbnail strip — raised off the bottom, chest-cropped, rarity glow */}
+      <div className="overflow-x-auto px-5 pb-10 pt-3 [scrollbar-width:thin]">
+        <div className="mx-auto flex w-fit gap-5">
           {catalog.map((c) => {
             const ownedC = owned.includes(c.id)
             const sel = c.id === selectedId
+            const glow = rarityGlow(c.rarity)
+            const fb = feedback?.id === c.id ? feedback.kind : null
             return (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => setSelectedId(c.id)}
-                className={`relative flex h-44 w-32 shrink-0 flex-col items-center justify-end overflow-hidden rounded-2xl border transition ${
-                  sel
-                    ? 'border-[var(--cr-blue-bright)] ring-2 ring-[var(--cr-blue-bright)]'
-                    : 'border-[var(--cr-panel-border)] hover:border-white/40'
-                } ${c.id === activeId ? 'bg-[var(--cr-blue)]/15' : 'bg-white/5'}`}
+                style={{ ['--glow' as string]: glow }}
+                className={`cr-thumb relative flex h-36 w-32 shrink-0 flex-col items-center justify-end overflow-hidden rounded-2xl border ${
+                  sel ? 'cr-thumb-selected border-[var(--cr-blue-bright)] ring-2 ring-[var(--cr-blue-bright)]' : 'cr-thumb-glow border-[var(--cr-panel-border)] hover:border-white/40'
+                } ${c.id === activeId ? 'bg-[var(--cr-blue)]/15' : 'bg-white/5'} ${
+                  fb === 'equip' ? 'cr-equip-pop' : ''
+                } ${fb === 'buy' ? 'cr-buy-flash' : ''}`}
               >
+                {/* Chest-up framing: the thumbnail is a full/half figure, so we
+                    blow it up and anchor the TOP so every card consistently
+                    shows head-to-chest regardless of how the source was cropped. */}
                 {c.thumbnail_url ? (
-                  <img src={c.thumbnail_url} alt={c.name} loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+                  <img
+                    src={c.thumbnail_url}
+                    alt={c.name}
+                    loading="lazy"
+                    className="absolute inset-x-0 top-0 h-[150%] w-full object-cover object-top"
+                  />
                 ) : (
                   <span className="absolute inset-0" style={{ background: cosmeticTint(c.id) }} />
                 )}
+                {/* One-shot ring burst on equip. */}
+                {fb === 'equip' && <span key={`ring-${c.id}`} className="cr-equip-ring" />}
                 {!ownedC && (
                   <span className="absolute right-1.5 top-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-xs text-amber-200">🔒</span>
                 )}

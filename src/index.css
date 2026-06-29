@@ -285,6 +285,76 @@ button:disabled {
   animation: cr-fade-up 0.45s ease both;
 }
 
+/* --------------------- character picker: rarity glow --------------------- */
+/* Per-rarity colored halo behind a thumbnail card. The glow color is set via
+   the --glow custom property on the element (see CharacterSelect rarityGlow). */
+.cr-thumb {
+  box-shadow: 0 0 0 0 transparent;
+  transition: box-shadow 0.25s ease, transform 0.18s ease;
+}
+.cr-thumb-glow {
+  box-shadow:
+    0 6px 18px -4px var(--glow),
+    0 0 22px -2px var(--glow);
+}
+.cr-thumb-selected {
+  transform: translateY(-4px);
+  box-shadow:
+    0 10px 26px -4px var(--glow),
+    0 0 30px 0 var(--glow);
+}
+
+/* ------------------- character picker: equip / buy feedback ------------------ */
+/* Equip: a satisfying pop + a ring that bursts outward and fades. */
+.cr-equip-pop {
+  animation: cr-equip-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes cr-equip-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+.cr-equip-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: 2px solid var(--glow, #5ea0ff);
+  animation: cr-equip-ring 0.6s ease-out forwards;
+}
+@keyframes cr-equip-ring {
+  0% { transform: scale(1); opacity: 0.9; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+/* Buy success: a golden shimmer sweep across the card. */
+.cr-buy-flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 216, 120, 0.65) 50%, transparent 70%);
+  background-size: 220% 100%;
+  animation: cr-buy-flash 0.7s ease-out forwards;
+}
+@keyframes cr-buy-flash {
+  0% { background-position: 160% 0; opacity: 0; }
+  20% { opacity: 1; }
+  100% { background-position: -60% 0; opacity: 0; }
+}
+
+/* A confirming glow that blooms over the hero preview on equip/buy. Used on a
+   transparent overlay, so it animates opacity (filter wouldn't show). */
+.cr-hero-pulse {
+  animation: cr-hero-pulse 0.6s ease-out forwards;
+}
+@keyframes cr-hero-pulse {
+  0% { opacity: 0; transform: scale(0.96); }
+  35% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.04); }
+}
+
 /* Respect reduced motion: reveal instantly, no looping/exit motion (§12). */
 @media (prefers-reduced-motion: reduce) {
   .cr-enter,
@@ -302,6 +372,12 @@ button:disabled {
     animation-duration: 0.2s;
   }
   .cr-hint-hand {
+    animation: none;
+  }
+  .cr-equip-pop,
+  .cr-equip-ring,
+  .cr-buy-flash::after,
+  .cr-hero-pulse {
     animation: none;
   }
 }
