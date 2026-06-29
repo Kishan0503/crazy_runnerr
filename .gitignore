@@ -29,6 +29,12 @@ dist-ssr
 # live in public/models/ and ARE committed. Keep originals local only.
 /models/
 
+# Internal admin tooling (character build/upload/catalog scripts). The repo is
+# public; keep this tooling local-only so it can't be misused. No secrets live
+# here (the service key is read from the gitignored .env.local), but there's no
+# reason to publish it.
+/scripts/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
