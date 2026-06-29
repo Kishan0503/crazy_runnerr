@@ -32,6 +32,10 @@ interface CharacterStore {
   owned: string[]
   activeId: string
   loading: boolean
+  /** true once the first load() has resolved — until then activeId is just the
+   *  optimistic DEFAULT_ID and must NOT be rendered (else a wrong character
+   *  flashes before the real equipped one resolves). */
+  loaded: boolean
   /** (re)load catalog + ownership + equipped character for the current auth state */
   load: () => Promise<void>
   /** equip an owned character */
@@ -62,6 +66,7 @@ export const useCharacterStore = create<CharacterStore>((set, get) => ({
   owned: [DEFAULT_ID],
   activeId: DEFAULT_ID,
   loading: false,
+  loaded: false,
 
   load: async () => {
     set({ loading: true })
@@ -83,7 +88,7 @@ export const useCharacterStore = create<CharacterStore>((set, get) => ({
     // Never leave the player equipped with something they don't own.
     if (!owned.includes(activeId)) activeId = owned[0] ?? DEFAULT_ID
 
-    set({ catalog, owned, activeId, loading: false })
+    set({ catalog, owned, activeId, loading: false, loaded: true })
     // Warm the equipped character's model so the first run starts instantly.
     preloadModel(catalog.find((c) => c.id === activeId)?.model_url)
   },

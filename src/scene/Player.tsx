@@ -51,6 +51,16 @@ export function Player() {
   const anim = useRef<Group>(null)
   const animMode = useRef<AnimMode>('procedural')
   const prevX = useRef(player.x)
+  // The equipped character's model URL. Used to KEY PlayerModel so a character
+  // swap forces a clean remount (fresh skeleton, fresh useAnimations mixer, fresh
+  // auto-fit) — the same thing that makes the picker preview reliable. Without
+  // the key, the old mixer/refs persisted across the swap and the new character
+  // froze in bind pose (no clips playing, un-normalized size).
+  const modelUrl = useCharacterStore((s) => s.activeCharacter()?.model_url) ?? FALLBACK_MODEL
+  // Until the catalog/equip state has loaded, activeId is just the optimistic
+  // default ('runner'); rendering it would flash the wrong character before the
+  // real equipped one resolves. Hold the model until then.
+  const charLoaded = useCharacterStore((s) => s.loaded)
 
   useFrame((_, delta) => {
     if (!world.running) return
@@ -124,7 +134,9 @@ export function Player() {
             missing/broken asset (ModelBoundary), not for the normal load. */}
         <Suspense fallback={null}>
           <ModelBoundary fallback={<PlayerPlaceholder />}>
-            <PlayerModel onMode={(m) => (animMode.current = m)} />
+            {charLoaded && (
+              <PlayerModel key={modelUrl} url={modelUrl} onMode={(m) => (animMode.current = m)} />
+            )}
           </ModelBoundary>
         </Suspense>
       </group>
@@ -185,9 +197,12 @@ function posedWorldBox(group: Group): Box3 | null {
   return _box.isEmpty() ? null : _box
 }
 
-/** Target rendered height (units) for the in-game character — matches the hitbox
- *  and the old character's on-screen size, so any source model normalizes to it. */
-const GAME_TARGET_H = 1.5
+/** Target rendered height (units) for the in-game character. Slightly TALLER than
+ *  the 1.4 logical hitbox so the runner reads clearly on the dark track / start
+ *  screen (the small visual overhang past the collision box is unnoticeable).
+ *  This is VISUAL ONLY — collisions use PLAYER_SIZE/runnerHeight, unchanged — so
+ *  difficulty is identical regardless of this value. */
+const GAME_TARGET_H = 1.7
 
 /**
  * Loads player.glb plus the two external Mixamo clips (idle + 180° turn) and
@@ -204,11 +219,11 @@ const GAME_TARGET_H = 1.5
  * The turn rotation is synced on the node (face-camera → face-track) so the final
  * facing is correct regardless of any root motion baked into the clip.
  */
-function PlayerModel({ onMode }: { onMode: (mode: AnimMode) => void }) {
-  // Catalog-driven: load whatever the EQUIPPED character's model_url points at
-  // (Supabase Storage or a local path). Each character glb bakes all five clips
-  // (idle/run/jump/slide/turn180), so there's no runtime FBX merge any more.
-  const url = useCharacterStore((s) => s.activeCharacter()?.model_url) ?? FALLBACK_MODEL
+function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) => void }) {
+  // Catalog-driven: `url` is the EQUIPPED character's model_url (passed from
+  // Player, which also keys this component on it → clean remount per character).
+  // Each character glb bakes all five clips (idle/run/jump/slide/turn180), so
+  // there's no runtime FBX merge any more.
   const modelScale = useCharacterStore((s) => s.activeCharacter()?.model_scale) ?? 1
   const { scene, animations } = useGLTF(url)
   const ref = useRef<Group>(null)
