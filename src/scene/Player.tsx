@@ -144,17 +144,25 @@ export function Player() {
   )
 }
 
-/** Match clip names loosely so any reasonable rig naming works (§9.3). The two
- *  imported FBX clips are bound to fixed names (idle180 / turn180) on import. */
+/** Match clip names loosely so any reasonable rig naming works (§9.3). Each
+ *  character glb is expected to bake all five clips named exactly idle/run/
+ *  jump/slide/turn180 (see character-asset pipeline), but matching is
+ *  substring-based so small naming drift doesn't hard-break a character. */
 function matchClips(names: string[]) {
   const find = (...keys: string[]) =>
     names.find((n) => keys.some((k) => n.toLowerCase().includes(k)))
+  const turn = find('turn180', 'turn')
+  if (!turn && names.length > 0) {
+    // A loaded character with no turn clip silently skips the intro turn —
+    // surface it instead of leaving it to look like a random one-off bug.
+    console.warn('[Player] no turn180 clip found among:', names)
+  }
   return {
     run: find('run', 'sprint', 'jog'),
     jump: find('jump', 'leap'),
     slide: find('slide', 'roll', 'duck', 'crouch'),
     idle: find('idle', 'stand', 'tpose'),
-    turn: find('turn180', 'turn'),
+    turn,
   }
 }
 
@@ -290,11 +298,15 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
       turning.current = false
     } else if (starting && phase === 'start') {
       // Play Now pressed: run the 180° turn once, then hand off to run + start().
+      // Guard on names.length so a not-yet-populated actions map (the first
+      // frame or two after mount) can't be mistaken for "no turn clip" and
+      // permanently skip the turn for this run.
       if (clips.turn) {
         want = clips.turn
         turning.current = true
-      } else {
-        // No turn clip available — skip straight to the run and begin.
+      } else if (names.length > 0) {
+        // Clips are loaded and genuinely have no turn clip — skip straight to
+        // the run and begin.
         want = clips.run ?? names[0]
         useGameStore.getState().start()
       }
@@ -306,14 +318,18 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
 
     if (want && want !== current.current) {
       const next = actions[want]
+      // Only commit the switch once the action actually exists — if `actions`
+      // hasn't registered this clip yet (possible for a frame or two right
+      // after mount), leave current.current alone so we retry next frame
+      // instead of silently getting stuck (e.g. mid-turn with time frozen at 0).
       if (next) {
         const once = want === clips.jump || want === clips.slide || want === clips.turn
         next.setLoop(once ? LoopOnce : LoopRepeat, Infinity)
         next.clampWhenFinished = once
         next.reset().fadeIn(0.15).play()
+        if (current.current) actions[current.current]?.fadeOut(0.15)
+        current.current = want
       }
-      if (current.current) actions[current.current]?.fadeOut(0.15)
-      current.current = want
     }
 
     // ---- Facing ----

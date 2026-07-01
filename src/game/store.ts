@@ -119,7 +119,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   quit: () => {
     idleWorld()
-    set({ phase: 'start', coins: 0, starting: false })
+    // Mirror the new runId (bumped inside idleWorld → freshRun → resetWorld)
+    // into React state, same as start() — otherwise <ObstacleField key={runId}>
+    // never remounts and every obstacle/coin from the run stays frozen in place
+    // behind the start screen.
+    set({ phase: 'start', coins: 0, starting: false, runId: world.runId })
   },
 
   collectCoin: () => set((s) => ({ coins: s.coins + 1 })),

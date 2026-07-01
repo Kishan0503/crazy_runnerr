@@ -23,7 +23,7 @@ interface ActiveObs {
 interface ActiveCoinData {
   id: number
   lane: number
-  /** index within the 3-coin run, offsets its starting depth */
+  /** index within the coin run, offsets its starting depth */
   runIndex: number
 }
 
@@ -154,7 +154,7 @@ export function ObstacleField() {
       const lane = plan.coinLane
       setCoins((prev) => [
         ...prev,
-        ...Array.from({ length: CONFIG.coinsPerRun }, (_, i) => ({
+        ...Array.from({ length: plan.coinCount }, (_, i) => ({
           id: nextObstacleId(),
           lane,
           runIndex: i,

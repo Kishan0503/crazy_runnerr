@@ -25,15 +25,16 @@ export const CONFIG = {
   slideLerp: 16, // squash/stretch easing for slide
 
   // ---- Speed: distance-stepped tiers, NOT continuous (§ updated mechanic) ----
-  // Base forward speed = the 1.0x tier. Speed steps up by `speedTierStep` each
-  // `speedTierDistance` metres, up to `speedMaxTier` multiplier, then holds flat.
-  // This trims reaction time as the player progresses WITHOUT overcrowding the
-  // track, and the cap guarantees the game stays playable on very long runs.
-  //   0–500m: 1.0x · 500–1000: 1.25x · 1000–1500: 1.5x · 1500–2000: 1.75x · 2000+: 2.0x
+  // Base forward speed = the 1.0x tier. Speed steps up by `speedTierStep` at each
+  // cumulative distance in `speedTierThresholds`, up to `speedMaxTier`, then holds
+  // flat. Thresholds are front-loaded (small early gaps, widening later) so the
+  // pace picks up fast at the start instead of sitting flat for 500m, while still
+  // capping out at a sane distance for long runs.
+  //   0–150m: 1.0x · 150–400m: 1.25x · 400–800m: 1.5x · 800–1400m: 1.75x · 1400+: 2.0x
   speedStart: 16, // forward speed at the 1.0x tier (units/sec)
-  speedTierDistance: 500, // metres per speed tier
+  speedTierThresholds: [150, 400, 800, 1400], // cumulative metres where each tier bump lands
   speedTierStep: 0.25, // multiplier gained per tier (0.25 = +25%)
-  speedMaxTier: 2.0, // hard cap on the speed multiplier (reached at 2000m)
+  speedMaxTier: 2.0, // hard cap on the speed multiplier (reached at 1400m)
 
   spawnGapStart: 16, // distance between rows at base speed
   spawnGapMin: 9.5, // tightest row spacing
@@ -45,12 +46,11 @@ export const CONFIG = {
   // then row spacing tightens and two-lane rows grow once speed can rise no more.
   spawnWarmup: 12, // no obstacles for the first N metres (gentle on-ramp)
   spawnGapEarly: 20, // row spacing while density is held (sparse, not empty)
-  densityStartDistance: 2000, // metres before density begins to ramp (= speed cap)
+  densityStartDistance: 1400, // metres before density begins to ramp (= speed cap)
   difficultyRampDistance: 1000, // metres over which density ramps after it starts
   twoLaneMaxChance: 0.5, // peak probability a row blocks two lanes (1 lane while held)
 
   coinValue: 5, // score added per coin
-  coinsPerRun: 3, // coins per spawned coin run
 
   // Camera
   cameraPos: [0, 5.4, 9.5], // chase camera position (behind + above)

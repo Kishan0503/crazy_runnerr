@@ -10,14 +10,20 @@ export interface RowObstacle {
 /** A full row: obstacles plus an optional coin run in an open lane (§4.5). */
 export interface RowPlan {
   obstacles: RowObstacle[]
-  /** lane index for a 3-coin run, or null if this row has no coins */
+  /** lane index for the coin run, or null if this row has no coins */
   coinLane: number | null
+  /** how many coins in the run (1–10), meaningless if coinLane is null */
+  coinCount: number
 }
 
 const KINDS: ObstacleKind[] = ['low', 'overhead', 'block']
 
 /** Probability that a given row also carries a coin run. */
 const COIN_ROW_CHANCE = 0.6
+
+/** Coin runs are 1–10 coins, uniformly random, for unpredictable pickups (§4.5). */
+const COIN_RUN_MIN = 1
+const COIN_RUN_MAX = 10
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
@@ -106,8 +112,10 @@ export function makeRowPlan(twoLaneChance = 0.5, rng: () => number = Math.random
     open.length > 0 && rng() < COIN_ROW_CHANCE
       ? open[Math.floor(rng() * open.length)]
       : null
+  const coinCount =
+    coinLane !== null ? COIN_RUN_MIN + Math.floor(rng() * (COIN_RUN_MAX - COIN_RUN_MIN + 1)) : 0
 
-  return { obstacles, coinLane }
+  return { obstacles, coinLane, coinCount }
 }
 
 /**

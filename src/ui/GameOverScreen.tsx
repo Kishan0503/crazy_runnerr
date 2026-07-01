@@ -15,13 +15,16 @@ function Stat({ label, value, accent }: { label: string; value: number; accent?:
 }
 
 /**
- * Game Over screen (PRD §5): final distance, best distance, coins collected, and
- * a primary "Tap to retry" action. Tapping anywhere (or Enter/Space via
- * useMetaControls) starts a fresh run. Shown only in the `gameover` phase.
+ * Game Over screen (PRD §5): final distance, best distance, coins collected, a
+ * primary "Tap to retry" action, and a "Quit to Main Menu" action. Tapping
+ * anywhere (or Enter/Space via useMetaControls) retries; uses pointerdown
+ * (not click) so the action fires on first touch/click, immediately. Shown
+ * only in the `gameover` phase.
  */
 export function GameOverScreen() {
   const phase = useGameStore((s) => s.phase)
   const start = useGameStore((s) => s.start)
+  const quit = useGameStore((s) => s.quit)
   const lastDistance = useGameStore((s) => s.lastDistance)
   const best = useGameStore((s) => s.best)
   const coins = useGameStore((s) => s.coins)
@@ -33,7 +36,10 @@ export function GameOverScreen() {
   return (
     <div
       className="absolute inset-0 z-20 flex cursor-pointer flex-col items-center justify-center gap-7 bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(20,40,90,0.4),rgba(0,0,0,0.72))] px-6 text-center backdrop-blur-sm"
-      onClick={() => start()}
+      // pointerdown (not click) so retry fires on first contact — a synthetic
+      // click after touchend can land back on the canvas if a swipe/tap was
+      // still in flight the instant gameOver() swapped this screen in.
+      onPointerDown={() => start()}
     >
       <div className="flex flex-col items-center gap-3">
         {isNewBest && (
@@ -50,16 +56,28 @@ export function GameOverScreen() {
         <Stat label="Coins" value={coins} accent />
       </div>
 
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          start()
-        }}
-        className="cr-play pointer-events-auto px-9 py-4 text-lg"
-      >
-        Tap to retry
-      </button>
+      <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            start()
+          }}
+          className="cr-play pointer-events-auto px-9 py-4 text-lg"
+        >
+          Tap to retry
+        </button>
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            quit()
+          }}
+          className="cr-panel pointer-events-auto px-7 py-4 text-lg font-semibold text-white/80 hover:text-white"
+        >
+          Quit to Main Menu
+        </button>
+      </div>
     </div>
   )
 }

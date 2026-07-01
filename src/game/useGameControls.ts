@@ -62,6 +62,11 @@ export function useGameControls() {
     let tracking = false
 
     const onTouchStart = (e: TouchEvent) => {
+      // Gate by isPlaying() like onTouchEnd — otherwise a swipe started right
+      // before a collision leaves tracking state armed across the transition
+      // into game-over, and the resulting synthetic click can land on the
+      // canvas instead of the new Game Over screen (first tap "does nothing").
+      if (!isPlaying()) return
       const t = e.changedTouches[0]
       startX = t.clientX
       startY = t.clientY
