@@ -50,12 +50,14 @@ export function GameCanvas() {
       <fog attach="fog" args={[SCENE_BG, CONFIG.fogNear, CONFIG.fogFar]} />
 
       {/* Lighting: cool blue night. Soft hemisphere/ambient fill, a crisp key
-          light for the player's ground shadow, and a blue rim for neon mood. */}
-      <hemisphereLight args={['#9fc0ff', '#0a1124', 0.45]} />
-      <ambientLight intensity={0.25} />
+          light for the player's ground shadow, and a blue rim for neon mood.
+          Fill is lifted a touch so the runner reads clearly on the dark track
+          without washing out the neon city. */}
+      <hemisphereLight args={['#9fc0ff', '#0a1124', 0.6]} />
+      <ambientLight intensity={0.4} />
       <directionalLight
         position={[5, 13, 7]}
-        intensity={1.5}
+        intensity={1.7}
         color="#dfe9ff"
         castShadow
         shadow-mapSize={[2048, 2048]}
@@ -69,6 +71,10 @@ export function GameCanvas() {
       />
       {/* Cool rim/fill from the side+back for a neon edge on the character. */}
       <directionalLight position={[-6, 4, -8]} intensity={0.6} color="#4f80ff" />
+      {/* Soft front fill aimed down the track from the camera side, so the runner
+          (who faces away from us) isn't left in shadow. Low + warm-neutral to
+          brighten the character without flattening the scene. */}
+      <directionalLight position={[0, 4, 12]} intensity={0.55} color="#eaf1ff" />
 
       <ChaseCamera />
 
