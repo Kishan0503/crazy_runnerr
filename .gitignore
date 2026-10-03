@@ -45,3 +45,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Private planning docs (roadmap, monetization strategy) — the repo is public.
+/docs/

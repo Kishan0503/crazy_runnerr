@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { AdaptiveDpr, Preload } from '@react-three/drei'
 import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing'
@@ -9,6 +9,10 @@ import { Track } from './Track'
 import { Player } from './Player'
 import { ObstacleField } from './ObstacleField'
 import { Environment } from './Environment'
+
+// Dev-only debug overlay (stats, hitboxes). `null` in production, so the lazy
+// chunk is never referenced or emitted.
+const DebugScene = import.meta.env.DEV ? lazy(() => import('./debug/DebugScene')) : null
 
 /**
  * Fixed behind-and-above chase camera (PRD §4.1, §8.2). No orbit controls.
@@ -101,6 +105,12 @@ export function GameCanvas() {
       </EffectComposer>
 
       <AdaptiveDpr pixelated={false} />
+
+      {DebugScene && (
+        <Suspense fallback={null}>
+          <DebugScene />
+        </Suspense>
+      )}
     </Canvas>
   )
 }

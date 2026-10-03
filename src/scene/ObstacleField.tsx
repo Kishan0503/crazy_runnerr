@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Group, MathUtils } from 'three'
 import { CONFIG } from '../game/config'
@@ -11,6 +11,7 @@ import { nextObstacleId, tickSpawner } from '../game/spawn'
 import { useGameStore } from '../game/store'
 import { Obstacle } from './Obstacle'
 import { Coin } from './Coin'
+import { debugObstacles, useDebugStore } from '../game/debug/flags'
 
 const COIN_SPACING = 2.2 // depth gap between coins in a run
 
@@ -42,16 +43,30 @@ function ActiveObstacle({
   const z = useRef(CONFIG.spawnZ)
   const gameOver = useGameStore((s) => s.gameOver)
 
+  // Dev: register with the hitbox overlay; unregister on recycle/unmount.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    debugObstacles.set(id, { kind, lane, z: z.current })
+    return () => void debugObstacles.delete(id)
+  }, [id, kind, lane])
+
   useFrame(() => {
     if (!world.running) return
 
     z.current += world.dz
     const g = ref.current
     if (g) g.position.z = z.current
+    if (import.meta.env.DEV) {
+      const dbg = debugObstacles.get(id)
+      if (dbg) dbg.z = z.current
+    }
 
     if (hits(player, kind, lane, z.current)) {
-      gameOver()
-      return
+      // Dev god mode: collisions never end the run.
+      if (!(import.meta.env.DEV && useDebugStore.getState().godMode)) {
+        gameOver()
+        return
+      }
     }
 
     if (z.current > CONFIG.recycleZ) onRecycle(id)

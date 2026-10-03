@@ -15,6 +15,8 @@ export function installDevBridge() {
     store: useGameStore,
   }
 
+  installDebugTools()
+
   // Headless verification helper: `?autoplay` jumps straight into a run once the
   // scene is ready, so automated screenshots can capture live gameplay.
   if (new URLSearchParams(location.search).has('autoplay')) {
@@ -24,5 +26,42 @@ export function installDevBridge() {
         setTimeout(() => useGameStore.getState().start(), 50)
       }
     })
+  }
+}
+
+/**
+ * Debug mode (Phase 0): tuning panel + FPS stats + hitbox/god-mode tools.
+ * Enabled by `?debug` or toggled with the backtick key. The panel module (and
+ * lil-gui) is dynamically imported, so none of it ships in production.
+ */
+async function installDebugTools() {
+  const [{ useDebugStore }, panel] = await Promise.all([
+    import('./debug/flags'),
+    import('./debug/tuningPanel'),
+  ])
+  // Saved tweaks apply even when the panel stays closed, so tuning sticks.
+  panel.applySavedTuning()
+
+  useDebugStore.subscribe((s, prev) => {
+    if (s.enabled === prev.enabled) return
+    if (s.enabled) void panel.showTuningPanel()
+    else panel.hideTuningPanel()
+  })
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'Backquote' || e.repeat) return
+    const target = e.target as HTMLElement | null
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
+    const { enabled, setEnabled } = useDebugStore.getState()
+    setEnabled(!enabled)
+  })
+
+  // `?debug` enables debug mode; `?debug=god,hitboxes` also pre-enables tools
+  // (handy for headless screenshots).
+  const param = new URLSearchParams(location.search).get('debug')
+  if (param !== null) {
+    const opts = param.split(',')
+    useDebugStore.setState({ godMode: opts.includes('god'), showHitboxes: opts.includes('hitboxes') })
+    useDebugStore.getState().setEnabled(true)
   }
 }
