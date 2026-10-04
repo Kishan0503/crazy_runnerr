@@ -6,6 +6,8 @@ import { Box3, Group, MathUtils, Matrix4, Mesh, Object3D, SkinnedMesh, Vector3 }
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js'
 import { useCharacterStore } from '../game/characterStore'
 import { stripRootMotion } from '../game/animation'
+import { createHeightSampler } from '../game/stableHeight'
+import { SOLE_GAP, feetWorldY } from '../scene/rigFit'
 import { cosmeticTint, type Character } from '../game/characters'
 import { useAuthStore } from '../game/auth'
 import { useGameStore } from '../game/store'
@@ -35,6 +37,7 @@ export const useCharacterUi = create<CharacterUi>((set) => ({
 // pose-stable (a breathing idle barely moves the feet), so it stays put. The
 // camera looks at mid-height so a feet-at-0 model sits centered.
 const TARGET_H = 1.8
+const _feetOrigin = new Vector3()
 const _box = new Box3()
 const _v = new Vector3()
 const _inv = new Matrix4()
@@ -87,7 +90,7 @@ function PreviewModel({ url, yawRef }: { url: string; yawRef: { current: number 
   }, [scene])
   // Same in-place rule as the in-game rig, so a drifting clip can't walk the preview off-frame.
   const inPlace = useMemo(() => stripRootMotion(animations), [animations])
-  const { actions, names } = useAnimations(inPlace, model)
+  const { actions, names, mixer } = useAnimations(inPlace, model)
 
   // Play the idle clip on a loop.
   useEffect(() => {
@@ -102,6 +105,7 @@ function PreviewModel({ url, yawRef }: { url: string; yawRef: { current: number 
   // midpoint — feet are pose-stable, the midpoint is not. The pivot spins; the
   // model only ever translates vertically to keep its feet on the floor.
   const scaled = useRef(false)
+  const heightSample = useRef(createHeightSampler(0.03, 3))
   const groundFrames = useRef(20)
   const logged = useRef(false)
   useFrame((_, dt) => {
@@ -116,24 +120,36 @@ function PreviewModel({ url, yawRef }: { url: string; yawRef: { current: number 
     // multiplied by m.scale to get pivot-frame (rendered) units.
     if (!scaled.current) {
       const b = posedBox(m)
-      if (b) {
-        const h = b.max.y - b.min.y // local (unscaled) height
-        if (h > 1e-4) {
-          m.scale.setScalar(TARGET_H / h)
-          scaled.current = true
-          if (!logged.current) {
-            logged.current = true
-            // eslint-disable-next-line no-console
-            console.info(`[preview] ${url.split('/').pop()} posedH=${h.toFixed(3)} scale=${(TARGET_H / h).toFixed(2)}`)
-          }
+      // Only trust the height once the idle pose is applied and stable across
+      // frames (the bind pose can be in different units → giant/tiny preview).
+      // "Posed" = the idle clip has fully faded in (not blended with the bind pose).
+      const idleAction = Object.values(actions).find((a) => a?.isRunning())
+      const posed = mixer.time > 0 && !!idleAction && idleAction.getEffectiveWeight() > 0.99
+      const h = heightSample.current(b ? b.max.y - b.min.y : 0, posed) // local (unscaled) height
+      if (h !== null) {
+        m.scale.setScalar(TARGET_H / h)
+        scaled.current = true
+        if (!logged.current) {
+          logged.current = true
+          // eslint-disable-next-line no-console
+          console.info(`[preview] ${url.split('/').pop()} posedH=${h.toFixed(3)} scale=${(TARGET_H / h).toFixed(2)}`)
         }
       }
       return // ground only after scaling is applied
     }
     if (groundFrames.current > 0) {
-      const b = posedBox(m) // local-frame box
-      // Feet in pivot frame = m.position.y + m.scale*b.min.y; set that to 0.
-      if (b) m.position.y = -b.min.y * m.scale.y
+      // Ground on the foot bones (the skinned box can briefly be the raw,
+      // origin-centred geometry and float the model by half its height);
+      // fall back to the posed box if the rig has no foot bones.
+      const feet = feetWorldY(m)
+      const pivotY = p ? p.getWorldPosition(_feetOrigin).y : 0
+      if (feet !== null) {
+        m.position.y += SOLE_GAP * (TARGET_H / 1.7) - (feet - pivotY)
+      } else {
+        const b = posedBox(m) // local-frame box
+        // Feet in pivot frame = m.position.y + m.scale*b.min.y; set that to 0.
+        if (b) m.position.y = -b.min.y * m.scale.y
+      }
       groundFrames.current--
     }
   })

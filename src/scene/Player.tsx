@@ -12,9 +12,12 @@ import { world } from '../game/world'
 import { useGameStore } from '../game/store'
 import { useCharacterStore } from '../game/characterStore'
 import { stripRootMotion } from '../game/animation'
+import { LIBRARY_URL, hipsAnimY, mergeLibraryClips, nodeNames } from '../game/animationLibrary'
 import { emit } from '../game/events'
 import { fx, nowSec } from '../game/fxState'
 import type { PlayerRuntime } from '../game/types'
+import { createHeightSampler } from '../game/stableHeight'
+import { SOLE_GAP, feetWorldY } from './rigFit'
 import { ModelBoundary } from './Model'
 
 /**
@@ -43,6 +46,12 @@ const STUMBLE_HOP = 0.22 // little hop height during the wobble
 // Clip blending: normal state changes vs the "instant" ones (cancel / fast-fall).
 const FADE = 0.15
 const FADE_FAST = 0.08
+/** Seconds the stumble clip overrides the run (the 1.2 s clip is sped up to fit). */
+const STUMBLE_CLIP_TIME = 0.7
+/** Seconds on the Game Over screen before a new-best celebration starts. */
+const CELEBRATE_DELAY = 1.8
+/** Seconds per ground-contact window (≈ one run cycle). */
+const GROUND_WINDOW = 0.5
 type Snapshot = ReturnType<typeof snapshot>
 function snapshot(s: PlayerRuntime) {
   return {
@@ -123,7 +132,11 @@ export function Player() {
       const o = outer.current
       if (o) {
         o.position.x = player.x
-        o.position.y = player.y
+        // After a mid-air crash, settle the fallen body onto the ground (visual only).
+        o.position.y =
+          useGameStore.getState().phase === 'gameover'
+            ? MathUtils.damp(o.position.y, 0, 10, Math.min(delta, 0.05))
+            : player.y
         o.rotation.z = 0
         o.scale.y = animMode.current === 'procedural' ? player.scaleY : 1
       }
@@ -157,7 +170,9 @@ export function Player() {
     // Stumble feedback: a short wobble + hop, restarted on each new stumble.
     if (s.stumbleSeq !== lastStumble.current) {
       lastStumble.current = s.stumbleSeq
-      wobble.current = STUMBLE_TIME
+      // Clip characters play a real stumble animation; the wobble is only for
+      // the procedural fallback model.
+      wobble.current = animMode.current === 'procedural' ? STUMBLE_TIME : 0
     }
     let wobbleRoll = 0
     let wobbleHop = 0
@@ -265,6 +280,10 @@ function matchClips(names: string[]) {
     run: find('run', 'sprint', 'jog'),
     jump: find('jump', 'leap'),
     slide: find('slide', 'roll', 'duck', 'crouch'),
+    // Shared-library clips (Phase 3).
+    stumble: find('stumble'),
+    fall: find('fall'),
+    celebrate: find('celebrate'),
     idle: find('idle', 'stand', 'tpose'),
     turn,
   }
@@ -351,15 +370,25 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
     return c
   }, [scene])
 
-  // Play every clip in place: forward travel comes from the scrolling world, so
-  // root motion baked into a clip (the default Runner's jump/slide) is removed.
-  const inPlace = useMemo(() => stripRootMotion(animations), [animations])
+  // Shared library clips (stumble / fall / celebrate / turn180 / land) are merged
+  // in and retargeted to this character's size (Phase 3). Then every clip plays
+  // in place: forward travel comes from the scrolling world, so root motion baked
+  // into a clip (the default Runner's jump/slide) is removed.
+  const library = useGLTF(LIBRARY_URL).animations
+  const inPlace = useMemo(
+    () => stripRootMotion(mergeLibraryClips(animations, library, hipsAnimY(animations, scene), nodeNames(scene))),
+    [animations, library, scene],
+  )
   const { actions, names, mixer } = useAnimations(inPlace, ref)
   const hasClips = animations.length > 0
   const clips = useMemo(() => matchClips(names), [names])
   const current = useRef('')
   // Last seen jump/slide counters (per run) — detect a NEW action of the same kind.
-  const seq = useRef({ run: world.runId, jump: player.jumpSeq, slide: player.slideSeq })
+  const seq = useRef({ run: world.runId, jump: player.jumpSeq, slide: player.slideSeq, stumble: player.stumbleSeq })
+  // Seconds left on the stumble clip (it overrides the run while > 0).
+  const stumbleLeft = useRef(0)
+  // Seconds spent on the Game Over screen (celebrate kicks in after a beat).
+  const overTime = useRef(0)
 
   const rotationY = BASE_FACING
   // Facing: run faces down the track (−Z); the start-screen idle faces the camera.
@@ -369,6 +398,10 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
   const turning = useRef(false) // mid 180° turn (after Play Now)
   const groundFrames = useRef(0) // frames left to re-seat feet on the ground
   const normalized = useRef(false) // size auto-normalized for this model yet?
+  const heightSample = useRef(createHeightSampler(0.03, 3))
+  const grounded = useRef(false) // feet seated at least once for this model
+  // Rolling lowest-foot window for the self-healing ground contact (end of useFrame).
+  const runCal = useRef({ time: 0, minFeet: Infinity })
 
   useEffect(() => {
     onMode(hasClips ? 'clips' : 'procedural')
@@ -386,6 +419,8 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
     g.rotation.y = yaw.current
     g.position.y = 0
     normalized.current = false
+    heightSample.current = createHeightSampler(0.03, 3)
+    grounded.current = false
     groundFrames.current = 16
   }, [object, modelScale])
 
@@ -400,12 +435,30 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
     const starting = useGameStore.getState().starting
 
     // ---- Decide the desired clip ----
+    if (world.runId !== seq.current.run) {
+      seq.current = { run: world.runId, jump: s.jumpSeq, slide: s.slideSeq, stumble: s.stumbleSeq }
+      stumbleLeft.current = 0
+    }
+    overTime.current = phase === 'gameover' ? overTime.current + dt : 0
+    const celebrating =
+      phase === 'gameover' && useGameStore.getState().newBest && !!clips.celebrate && overTime.current > CELEBRATE_DELAY
+
     let want: string | undefined
-    if (world.running) {
+    if (phase === 'dying' || phase === 'gameover') {
+      // Crash: fall and stay down — or, on a new best, get up and celebrate.
+      want = celebrating ? clips.celebrate : (clips.fall ?? current.current)
+      turning.current = false
+    } else if (world.running) {
       // Live run: full gameplay set, facing the track.
       want = clips.run ?? clips.idle ?? names[0]
+      if (s.stumbleSeq !== seq.current.stumble) {
+        seq.current.stumble = s.stumbleSeq
+        if (clips.stumble) stumbleLeft.current = STUMBLE_CLIP_TIME
+      }
+      if (stumbleLeft.current > 0) stumbleLeft.current = Math.max(0, stumbleLeft.current - dt)
       if (!s.grounded && clips.jump) want = clips.jump
       else if (s.sliding && clips.slide) want = clips.slide
+      else if (stumbleLeft.current > 0 && clips.stumble) want = clips.stumble
       turning.current = false
     } else if (starting && phase === 'start') {
       // Play Now pressed: run the 180° turn once, then hand off to run + start().
@@ -430,9 +483,6 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
     // A new jump/slide must restart its clip even if that clip is already the
     // current one (buffered re-jump on landing, re-pressed slide). Counters reset
     // each run, so resync on a new run id.
-    if (world.runId !== seq.current.run) {
-      seq.current = { run: world.runId, jump: s.jumpSeq, slide: s.slideSeq }
-    }
     const restart =
       world.running &&
       ((want === clips.jump && s.jumpSeq !== seq.current.jump) ||
@@ -449,7 +499,12 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
       // after mount), leave current.current alone so we retry next frame
       // instead of silently getting stuck (e.g. mid-turn with time frozen at 0).
       if (next) {
-        const once = want === clips.jump || want === clips.slide || want === clips.turn
+        const once =
+          want === clips.jump ||
+          want === clips.slide ||
+          want === clips.turn ||
+          want === clips.fall ||
+          want === clips.stumble
         next.setLoop(once ? LoopOnce : LoopRepeat, Infinity)
         next.clampWhenFinished = once
         // jump↔slide (fast-fall, slide-cancel) must read as instant.
@@ -467,7 +522,9 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
     const active = current.current ? actions[current.current] : undefined
     if (active) {
       const dur = active.getClip().duration
-      if (!world.running || current.current === clips.turn || current.current === clips.idle) {
+      if (current.current === clips.stumble) {
+        active.timeScale = dur / STUMBLE_CLIP_TIME // squeeze the stumble into its window
+      } else if (!world.running || current.current === clips.turn || current.current === clips.idle) {
         active.timeScale = 1
       } else if (current.current === clips.jump) {
         // Finish the clip exactly on landing; fast-fall slams it through quickly.
@@ -496,7 +553,9 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
       }
     } else {
       // Snap toward the correct facing for the current state (eased).
-      const target = world.running ? faceTrack : faceCamera
+      // Down the track while running / falling; turn to the camera on the start
+      // screen and to celebrate a new best.
+      const target = (world.running || phase === 'gameover') && !celebrating ? faceTrack : faceCamera
       yaw.current = MathUtils.damp(yaw.current, target, 14, dt)
     }
     const g = ref.current
@@ -511,22 +570,61 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
     // frozen (mid-run the feet legitimately rise/fall). Reveal once both are done.
     // One-time normalize (any state — handles an instant Play).
     if (!normalized.current) {
+      // Only trust the height once a clip pose is applied and it's stable
+      // across frames (the bind pose can be in different units).
       const box = posedWorldBox(g)
-      if (box) {
-        const h = box.max.y - box.min.y
-        if (h > 1e-4) {
-          g.scale.setScalar((GAME_TARGET_H / h) * modelScale)
-          normalized.current = true
-        }
+      // "Posed" = the current clip has fully faded in (a half-faded clip is
+      // still blended with the bind pose).
+      const playing = current.current ? actions[current.current] : null
+      const posed = mixer.time > 0 && !!playing && playing.getEffectiveWeight() > 0.99
+      const h = heightSample.current(box ? box.max.y - box.min.y : 0, posed)
+      if (h !== null) {
+        const s = (GAME_TARGET_H / h) * modelScale
+        g.scale.setScalar(s)
+        normalized.current = true
       }
     }
-    if (normalized.current && groundFrames.current > 0 && !world.running) {
-      const box = posedWorldBox(g)
-      if (box) g.position.y -= box.min.y
-      groundFrames.current--
+    // Ground on the FOOT BONES (not the skinned mesh box, which can briefly be
+    // the raw origin-centred geometry and used to float the model by half its
+    // height). Absolute, so a single odd frame can't accumulate. Done right
+    // after normalizing — even mid-run — then refined on the start screen.
+    if (normalized.current && ((!world.running && groundFrames.current > 0) || !grounded.current)) {
+      const feet = feetWorldY(g)
+      if (feet !== null) {
+        const originY = g.parent ? g.parent.getWorldPosition(_v).y : 0
+        g.position.y += SOLE_GAP - (feet - originY)
+        grounded.current = true
+      }
+      if (!world.running) groundFrames.current--
       g.visible = true
-    } else if (normalized.current && !g.visible) {
-      g.visible = true
+    }
+
+    // Self-healing ground contact: whenever the character is standing (start
+    // screen idle) or running on the ground, track the lowest foot over a
+    // ~half-second window and snap it back onto the floor if it drifted more
+    // than 1 cm. Physics assume feet on the floor while running, so this is the
+    // true reference — and any offset (a pose-dependent fit, a model reset
+    // mid-run) is corrected within one window. Jumps, slides, the fall and the
+    // celebration are never adjusted.
+    const cal = runCal.current
+    const standing =
+      (world.running && phase === 'playing' && s.grounded && !s.sliding) || (phase === 'start' && !turning.current)
+    if (normalized.current && standing) {
+      const feet = feetWorldY(g)
+      if (feet !== null) {
+        const originY = g.parent ? g.parent.getWorldPosition(_v).y : 0
+        cal.minFeet = Math.min(cal.minFeet, feet - originY)
+      }
+      cal.time += dt
+      if (cal.time >= GROUND_WINDOW) {
+        const error = SOLE_GAP - cal.minFeet
+        if (Number.isFinite(error) && Math.abs(error) > 0.01) g.position.y += error
+        cal.time = 0
+        cal.minFeet = Infinity
+      }
+    } else {
+      cal.time = 0
+      cal.minFeet = Infinity
     }
   })
 
@@ -569,3 +667,6 @@ function PlayerPlaceholder() {
     </group>
   )
 }
+
+// The shared animation library is needed by every character — fetch it early.
+useGLTF.preload(LIBRARY_URL)

@@ -14,7 +14,7 @@ import { bounceBack, stumble } from '../game/player'
 import { nextObstacleId, tickSpawner } from '../game/spawn'
 import { useGameStore } from '../game/store'
 import { Obstacle } from './Obstacle'
-import { Coin } from './Coin'
+import { CoinField, coinSlots } from './Coin'
 import { debugObstacles, useDebugStore } from '../game/debug/flags'
 
 const COIN_SPACING = 2.2 // depth gap between coins in a run
@@ -134,10 +134,15 @@ function ActiveCoin({
   runIndex,
   onRemove,
 }: ActiveCoinData & { onRemove: (id: number) => void }) {
-  const ref = useRef<Group>(null)
   const z = useRef(CONFIG.spawnZ - runIndex * COIN_SPACING)
   const x = useRef<number>(CONFIG.lanes[lane])
   const collectCoin = useGameStore((s) => s.collectCoin)
+
+  // Drawn by <CoinField/> (one instanced mesh): register our position slot.
+  useEffect(() => {
+    coinSlots.set(id, { x: x.current, z: z.current })
+    return () => void coinSlots.delete(id)
+  }, [id])
 
   useFrame((_, delta) => {
     if (!world.running) return
@@ -153,10 +158,10 @@ function ActiveCoin({
       z.current = MathUtils.damp(z.current, CONFIG.runnerZ, 7, dt)
     }
 
-    const g = ref.current
-    if (g) {
-      g.position.x = x.current
-      g.position.z = z.current
+    const slot = coinSlots.get(id)
+    if (slot) {
+      slot.x = x.current
+      slot.z = z.current
     }
 
     // Magnet active → collect by 3D proximity (lane-independent); otherwise the
@@ -165,6 +170,7 @@ function ActiveCoin({
       ? Math.abs(x.current - player.x) < 0.7 && Math.abs(z.current - CONFIG.runnerZ) < 0.9
       : collectsCoin(player, lane, z.current)
     if (collected) {
+      coinSlots.delete(id) // vanish this frame, not on the next React commit
       collectCoin()
       emit('coin', { streak: bumpStreak(fx.streak, nowSec()) })
       onRemove(id)
@@ -174,11 +180,7 @@ function ActiveCoin({
     if (z.current > CONFIG.recycleZ) onRemove(id)
   })
 
-  return (
-    <group ref={ref} position={[x.current, 0, z.current]}>
-      <Coin />
-    </group>
-  )
+  return null
 }
 
 /**
@@ -232,6 +234,8 @@ export function ObstacleField() {
       {coins.map((c) => (
         <ActiveCoin key={c.id} {...c} onRemove={removeCoin} />
       ))}
+      {/* Every coin above is drawn here in one instanced draw call. */}
+      <CoinField />
     </>
   )
 }

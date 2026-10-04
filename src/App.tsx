@@ -13,6 +13,7 @@ import { useAudio } from './audio/useAudio'
 import { useHaptics } from './game/useHaptics'
 import { useAutoPause } from './game/useAutoPause'
 import { Banners } from './ui/Banners'
+import { LoadingScreen } from './ui/LoadingScreen'
 
 /**
  * App shell. The WebGL canvas fills the screen; HUD/menus layer above as DOM
@@ -41,6 +42,7 @@ function App() {
       <TouchControls />
       <CharacterSelect />
       <AuthModal />
+      <LoadingScreen />
     </div>
   )
 }

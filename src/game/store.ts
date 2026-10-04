@@ -44,6 +44,8 @@ interface GameStore {
   gameOver: () => void
   /** performance.now() when the Game Over screen appeared (drives the tap-lock) */
   gameOverAt: number
+  /** the run that just ended beat the previous best (drives the celebrate pose) */
+  newBest: boolean
   /** freeze and show the pause overlay (optional, §5) */
   pause: () => void
   /** un-freeze and resume play */
@@ -85,6 +87,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   runId: 0,
   starting: false,
   gameOverAt: 0,
+  newBest: false,
 
   // Start-screen "Play Now": flag the exit transition; the screen plays it out
   // and calls start() when it finishes (player stays Idle until then).
@@ -100,7 +103,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     freshRun() // sets world.running = true and bumps world.runId
     // Mirror the new runId into React state so the obstacle field remounts
     // synchronously and no obstacle from the previous run can survive a frame.
-    set({ phase: 'playing', coins: 0, starting: false, runId: world.runId })
+    set({ phase: 'playing', coins: 0, starting: false, runId: world.runId, newBest: false })
     emit('runStart')
   },
 
@@ -131,7 +134,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const newBest = distance > get().best && distance > 0
     const best = Math.max(get().best, distance)
     const wallet = get().wallet + coins
-    set({ phase: 'gameover', best, lastDistance: distance, wallet, gameOverAt: performance.now() })
+    set({ phase: 'gameover', best, lastDistance: distance, wallet, gameOverAt: performance.now(), newBest })
     emit('gameOver', { newBest })
     void recordRun(distance, coins, useCharacterStore.getState().activeId)
   },

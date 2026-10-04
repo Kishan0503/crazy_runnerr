@@ -48,3 +48,6 @@ dist-ssr
 
 # Private planning docs (roadmap, monetization strategy) — the repo is public.
 /docs/
+
+# Temporary QA copies of models (original vs optimized) — never committed.
+/public/_qa/

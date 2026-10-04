@@ -2,6 +2,7 @@ import { world } from './world'
 import { player } from './playerState'
 import { useGameStore } from './store'
 import { emit, on } from './events'
+import { useCharacterStore } from './characterStore'
 
 /**
  * Dev-only debug bridge. Exposes the live runtime on `window.__game` so it can
@@ -15,6 +16,7 @@ export function installDevBridge() {
     player,
     store: useGameStore,
     events: { on, emit },
+    characters: useCharacterStore,
   }
 
   installDebugTools()

@@ -25,16 +25,20 @@ export interface ModelEntry {
   scale: number | [number, number, number]
   /** Y rotation so the model faces down the track (−Z) */
   rotationY?: number
-  /** flat color override (models are white); null keeps original material color */
+  /** flat color override; null keeps the model's own colors */
   tint?: string | null
+  /** self-illumination (0..1) from the model's own texture, so it reads at night + catches bloom */
+  glow?: number
 }
 
 export const MODELS: Record<ModelSlot, ModelEntry> = {
   player: { url: '/models/player.glb', scale: 0.72, rotationY: Math.PI, tint: null },
-  obstacle_low: { url: '/models/obstacle_low.glb', scale: 0.82, rotationY: 0, tint: '#d23b3b' },
-  obstacle_overhead: { url: '/models/obstacle_overhead.glb', scale: 1.3, rotationY: 0, tint: '#f4b914' },
-  // Crate stretched to fill the tall full-lane block hitbox (1.6 × 2.4 × 0.9).
-  obstacle_block: { url: '/models/obstacle_block.glb', scale: [0.82, 1.22, 0.46], rotationY: 0, tint: '#bd7b34' },
+  // Kenney CC0 kit models, pre-fitted to their hitboxes by tools/optimize-models.mjs
+  // (scale 1, own colors). Low: red-white road barrier · Overhead: striped arch
+  // gantry · Block: 2×3 crate stack.
+  obstacle_low: { url: '/models/obstacle_low.glb', scale: 1, rotationY: 0, tint: null, glow: 0.35 },
+  obstacle_overhead: { url: '/models/obstacle_overhead.glb', scale: 1, rotationY: 0, tint: null, glow: 0.35 },
+  obstacle_block: { url: '/models/obstacle_block.glb', scale: 1, rotationY: 0, tint: null, glow: 0.2 },
 }
 
 // Preload OBSTACLE models so they're ready before play begins (PRD §13). The

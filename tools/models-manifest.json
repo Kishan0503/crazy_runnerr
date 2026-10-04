@@ -1,0 +1,90 @@
+{
+  "$comment": "Model jobs for `npm run models:optimize`. Sources live in raw/ (gitignored). `fit` = target bounding box W x H x D the model is scaled to (matches the obstacle hitbox); `rotateY` in degrees is applied before fitting; `stack` builds a grid of copies merged into one mesh. `out` paths are relative to the project root.",
+  "kits": {
+    "city": "raw/models/kenney_city-kit-roads/Models/GLB format",
+    "racing": "raw/models/kenney_racing-kit/Models/GLTF format",
+    "platformer": "raw/models/kenney_platformer-kit/Models/GLB format"
+  },
+  "props": {
+    "obstacle_low": {
+      "src": "racing:barrierWall",
+      "fit": [
+        1.6,
+        0.9,
+        0.8
+      ],
+      "out": "public/models/obstacle_low.glb"
+    },
+    "obstacle_overhead": {
+      "src": "racing:overheadRoundColored",
+      "fit": [
+        1.8,
+        1.7,
+        0.6
+      ],
+      "out": "public/models/obstacle_overhead.glb"
+    },
+    "obstacle_block": {
+      "src": "platformer:crate-strong",
+      "stack": [
+        2,
+        3,
+        1
+      ],
+      "fit": [
+        1.6,
+        2.4,
+        0.9
+      ],
+      "out": "public/models/obstacle_block.glb"
+    },
+    "coin": {
+      "src": "platformer:coin-gold",
+      "fit": [
+        0.6,
+        0.6,
+        0.12
+      ],
+      "out": "public/models/coin.glb",
+      "center": true
+    }
+  },
+  "characters": {
+    "runner": {
+      "src": "raw/source/player.glb",
+      "out": "public/models/player.glb",
+      "textureSize": 1024
+    },
+    "rookie": {
+      "src": "raw/characters/rookie.glb",
+      "out": "dist-characters/rookie/model-v2.glb",
+      "textureSize": 1024,
+      "simplifyAbove": 25000
+    },
+    "techy": {
+      "src": "raw/characters/techy.glb",
+      "out": "dist-characters/techy/model-v2.glb",
+      "textureSize": 1024
+    },
+    "magno": {
+      "src": "raw/characters/magno.glb",
+      "out": "dist-characters/magno/model-v2.glb",
+      "textureSize": 1024
+    },
+    "ninja": {
+      "src": "raw/characters/ninja.glb",
+      "out": "dist-characters/ninja/model-v2.glb",
+      "textureSize": 1024
+    },
+    "cyborg": {
+      "src": "raw/characters/cyborg.glb",
+      "out": "dist-characters/cyborg/model-v2.glb",
+      "textureSize": 1024
+    },
+    "inferno": {
+      "src": "raw/characters/inferno.glb",
+      "out": "dist-characters/inferno/model-v2.glb",
+      "textureSize": 1024
+    }
+  }
+}
