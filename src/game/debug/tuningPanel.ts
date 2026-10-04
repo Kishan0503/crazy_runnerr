@@ -1,6 +1,7 @@
 import { CONFIG } from '../config'
 import { world } from '../world'
 import { perfStats, useDebugStore } from './flags'
+import { useSettings } from '../settings'
 
 /**
  * Live tuning panel (Phase 0, dev only). Binds lil-gui sliders directly to the
@@ -23,10 +24,18 @@ const STORAGE_KEY = 'lane-runner:dev-tuning'
 /** [key, min, max, step] grouped by folder. */
 const TUNABLES: Record<string, [TunableKey, number, number, number][]> = {
   Movement: [['laneLerp', 5, 30, 0.5]],
+  Controls: [
+    ['swipeThresholdScale', 0.4, 2.5, 0.05],
+    ['inputBufferTime', 0, 0.3, 0.01],
+  ],
   Jump: [
     ['jumpVelocity', 6, 18, 0.1],
     ['gravity', 10, 60, 0.5],
+    ['jumpSpeedScaling', 0, 1, 0.05],
+    ['fastFallVelocity', 5, 50, 0.5],
+    ['fastFallGravityMult', 1, 5, 0.1],
   ],
+  Rules: [['stumbleWindow', 0, 20, 0.5]],
   Slide: [
     ['slideDuration', 0.3, 1.2, 0.01],
     ['slideLerp', 5, 30, 0.5],
@@ -125,6 +134,11 @@ export async function showTuningPanel() {
     .add(tools, 'showHitboxes')
     .name('Show hitboxes')
     .onChange((v: boolean) => useDebugStore.setState({ showHitboxes: v }))
+  const touch = { buttons: useSettings.getState().showTouchButtons }
+  toolsFolder
+    .add(touch, 'buttons')
+    .name('Touch buttons')
+    .onChange((v: boolean) => useSettings.getState().set({ showTouchButtons: v }))
   toolsFolder.add(tools, 'jumpTo', 0, 5000, 50).name('Distance (m)')
   toolsFolder.add(tools, 'jump').name('Jump to distance')
   toolsFolder.add(tools, 'copy').name('Copy as config')
@@ -136,6 +150,10 @@ export async function showTuningPanel() {
   perf.add(perfStats, 'triangles').name('Triangles').listen().disable()
   perf.add(world, 'speed').name('Speed (u/s)').listen().disable()
   perf.add(world, 'distance').name('Distance (m)').listen().disable()
+
+  // On phones the panel would cover the swipe area — start collapsed there
+  // (tap the title bar to open it).
+  if (window.innerWidth < 600) gui.close()
 }
 
 export function hideTuningPanel() {

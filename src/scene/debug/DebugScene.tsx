@@ -22,6 +22,12 @@ export default function DebugScene() {
 function DebugTools() {
   const showHitboxes = useDebugStore((s) => s.showHitboxes)
   const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
+
+  // Expose the live scene graph for console inspection and scripted tests.
+  useEffect(() => {
+    Object.assign((window as unknown as { __game: object }).__game, { scene })
+  }, [scene])
 
   // Accumulate stats across every render pass in a frame (bloom/vignette render
   // several), then read + reset at the start of the next frame.
@@ -62,11 +68,12 @@ function HitboxOverlay() {
   const playerBox = useMemo(() => new LineSegments(edges, playerMat), [edges, playerMat])
 
   useFrame(() => {
-    // Player: collision uses the TARGET lane (player.lane), not the eased x —
-    // drawn exactly as collisions.ts tests it.
+    // Player: collision tests the REAL eased x (Phase 1) — drawn exactly as
+    // collisions.ts tests it. Orange while a stumble makes the next one fatal.
     const h = CONFIG.runnerHeight * player.scaleY
-    playerBox.position.set(CONFIG.lanes[player.lane], player.y + h / 2, CONFIG.runnerZ)
+    playerBox.position.set(player.x, player.y + h / 2, CONFIG.runnerZ)
     playerBox.scale.set(PLAYER_SIZE.width, h, PLAYER_SIZE.depth)
+    playerMat.color.set(player.stumbleTimer > 0 ? '#ffa024' : '#33ff88')
 
     let i = 0
     for (const o of debugObstacles.values()) {

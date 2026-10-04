@@ -7,9 +7,11 @@ import { CONFIG, PLAYER_SIZE } from '../game/config'
 import { inputBus } from '../game/input'
 import { applyIntent, stepPlayer } from '../game/player'
 import { player } from '../game/playerState'
+import { speedMultiplierAt } from '../game/speed'
 import { world } from '../game/world'
 import { useGameStore } from '../game/store'
 import { useCharacterStore } from '../game/characterStore'
+import { stripRootMotion } from '../game/animation'
 import { ModelBoundary } from './Model'
 
 /**
@@ -32,6 +34,19 @@ const JUMP_TUCK = -0.22 // forward tuck on the way up
 const JUMP_OPEN = 0.06 // open up on descent
 const SLIDE_LEAN = 0.5 // lean back while sliding
 const BANK = 0.05 // roll per unit lateral velocity (lean into lane changes)
+const STUMBLE_TIME = 0.35 // seconds of wobble after a stumble
+const STUMBLE_ROLL = 0.35 // peak wobble roll (rad)
+const STUMBLE_HOP = 0.22 // little hop height during the wobble
+// Clip blending: normal state changes vs the "instant" ones (cancel / fast-fall).
+const FADE = 0.15
+const FADE_FAST = 0.08
+/** Expected air time of the current jump. Height (v²/2g) is speed-independent,
+ *  so air time follows from the gravity locked in at take-off: T = 2·√(2H/g).
+ *  Read live (not cached) so tuning-panel changes apply immediately. */
+function jumpAirTime(jumpGravity: number) {
+  const height = CONFIG.jumpVelocity ** 2 / (2 * CONFIG.gravity)
+  return 2 * Math.sqrt((2 * height) / jumpGravity)
+}
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v))
 
 /**
@@ -51,6 +66,9 @@ export function Player() {
   const anim = useRef<Group>(null)
   const animMode = useRef<AnimMode>('procedural')
   const prevX = useRef(player.x)
+  const lastStumble = useRef(player.stumbleSeq)
+  const lastRun = useRef(world.runId)
+  const wobble = useRef(0) // seconds left in the stumble wobble
   // The equipped character's model URL. Used to KEY PlayerModel so a character
   // swap forces a clean remount (fresh skeleton, fresh useAnimations mixer, fresh
   // auto-fit) — the same thing that makes the picker preview reliable. Without
@@ -66,16 +84,42 @@ export function Player() {
     if (!world.running) return
     const dt = Math.min(delta, 0.05) // clamp so a tab refocus can't teleport (§8.3)
     const s = player
+    const speedMult = speedMultiplierAt(world.distance)
 
-    for (const intent of inputBus.drain()) applyIntent(s, intent)
-    stepPlayer(s, dt)
+    for (const intent of inputBus.drain()) applyIntent(s, intent, speedMult)
+    stepPlayer(s, dt, speedMult)
+
+    // A fresh run resets the player's counters to 0 — resync our trackers.
+    if (world.runId !== lastRun.current) {
+      lastRun.current = world.runId
+      lastStumble.current = s.stumbleSeq
+      wobble.current = 0
+    }
+
+    // Stumble feedback: a short wobble + hop, restarted on each new stumble.
+    if (s.stumbleSeq !== lastStumble.current) {
+      lastStumble.current = s.stumbleSeq
+      wobble.current = STUMBLE_TIME
+    }
+    let wobbleRoll = 0
+    let wobbleHop = 0
+    if (wobble.current > 0) {
+      wobble.current = Math.max(0, wobble.current - dt)
+      const p = 1 - wobble.current / STUMBLE_TIME // 0 → 1
+      wobbleRoll = Math.sin(p * Math.PI * 4) * STUMBLE_ROLL * (1 - p)
+      wobbleHop = Math.sin(p * Math.PI) * STUMBLE_HOP
+    }
+
+    // Visual-only offsets go on the outer group, which is set absolutely each
+    // frame (no easing feedback). Collision reads `player`, never this mesh.
 
     const proc = animMode.current === 'procedural'
 
     const o = outer.current
     if (o) {
       o.position.x = s.x
-      o.position.y = s.y
+      o.position.y = s.y + wobbleHop
+      o.rotation.z = wobbleRoll
       // Visual squash only in procedural mode; clips pose the crouch themselves.
       // The LOGICAL slide height (s.scaleY) still drives collision either way.
       o.scale.y = proc ? s.scaleY : 1
@@ -108,6 +152,8 @@ export function Player() {
 
     if (s.sliding) {
       pitch = SLIDE_LEAN // lean back into the slide (atop the outer squash)
+    } else if (s.fastFalling) {
+      pitch = JUMP_TUCK * 1.6 // hard forward tuck while slamming down
     } else if (!s.grounded) {
       pitch = s.vy > 0 ? JUMP_TUCK : JUMP_OPEN // tuck up, open on the way down
     } else {
@@ -247,10 +293,15 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
     return c
   }, [scene])
 
-  const { actions, names } = useAnimations(animations, ref)
+  // Play every clip in place: forward travel comes from the scrolling world, so
+  // root motion baked into a clip (the default Runner's jump/slide) is removed.
+  const inPlace = useMemo(() => stripRootMotion(animations), [animations])
+  const { actions, names } = useAnimations(inPlace, ref)
   const hasClips = animations.length > 0
   const clips = useMemo(() => matchClips(names), [names])
   const current = useRef('')
+  // Last seen jump/slide counters (per run) — detect a NEW action of the same kind.
+  const seq = useRef({ run: world.runId, jump: player.jumpSeq, slide: player.slideSeq })
 
   const rotationY = BASE_FACING
   // Facing: run faces down the track (−Z); the start-screen idle faces the camera.
@@ -316,7 +367,22 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
       turning.current = false
     }
 
-    if (want && want !== current.current) {
+    // A new jump/slide must restart its clip even if that clip is already the
+    // current one (buffered re-jump on landing, re-pressed slide). Counters reset
+    // each run, so resync on a new run id.
+    if (world.runId !== seq.current.run) {
+      seq.current = { run: world.runId, jump: s.jumpSeq, slide: s.slideSeq }
+    }
+    const restart =
+      world.running &&
+      ((want === clips.jump && s.jumpSeq !== seq.current.jump) ||
+        (want === clips.slide && s.slideSeq !== seq.current.slide))
+    if (world.running) {
+      seq.current.jump = s.jumpSeq
+      seq.current.slide = s.slideSeq
+    }
+
+    if (want && (want !== current.current || restart)) {
       const next = actions[want]
       // Only commit the switch once the action actually exists — if `actions`
       // hasn't registered this clip yet (possible for a frame or two right
@@ -326,9 +392,31 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
         const once = want === clips.jump || want === clips.slide || want === clips.turn
         next.setLoop(once ? LoopOnce : LoopRepeat, Infinity)
         next.clampWhenFinished = once
-        next.reset().fadeIn(0.15).play()
-        if (current.current) actions[current.current]?.fadeOut(0.15)
+        // jump↔slide (fast-fall, slide-cancel) must read as instant.
+        const actionSwap =
+          (want === clips.jump && current.current === clips.slide) ||
+          (want === clips.slide && current.current === clips.jump)
+        const fade = actionSwap || restart ? FADE_FAST : FADE
+        next.reset().fadeIn(fade).play()
+        if (current.current && current.current !== want) actions[current.current]?.fadeOut(fade)
         current.current = want
+      }
+    }
+
+    // ---- Clip speed: match animation length to the physics ----
+    const active = current.current ? actions[current.current] : undefined
+    if (active) {
+      const dur = active.getClip().duration
+      if (!world.running || current.current === clips.turn || current.current === clips.idle) {
+        active.timeScale = 1
+      } else if (current.current === clips.jump) {
+        // Finish the clip exactly on landing; fast-fall slams it through quickly.
+        active.timeScale = (dur / jumpAirTime(s.jumpGravity)) * (s.fastFalling ? 2.5 : 1)
+      } else if (current.current === clips.slide) {
+        active.timeScale = dur / CONFIG.slideDuration
+      } else if (current.current === clips.run) {
+        // Legs speed up with the game (≈1.6× at the 2× speed cap).
+        active.timeScale = 1 + 0.6 * (speedMultiplierAt(world.distance) - 1)
       }
     }
 

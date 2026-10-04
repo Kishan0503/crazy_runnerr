@@ -6,7 +6,8 @@ import type { ObstacleKind } from '../game/config'
 import { world } from '../game/world'
 import { player } from '../game/playerState'
 import { isMagnetActive } from '../game/ability'
-import { collectsCoin, hits } from '../game/collisions'
+import { classifyHit, collectsCoin, overlap } from '../game/collisions'
+import { bounceBack, stumble } from '../game/player'
 import { nextObstacleId, tickSpawner } from '../game/spawn'
 import { useGameStore } from '../game/store'
 import { Obstacle } from './Obstacle'
@@ -41,6 +42,10 @@ function ActiveObstacle({
 }: ActiveObs & { onRecycle: (id: number) => void }) {
   const ref = useRef<Group>(null)
   const z = useRef(CONFIG.spawnZ)
+  // Last frame's per-axis overlap — tells a head-on hit from a side swerve.
+  const prev = useRef({ x: false, z: false })
+  // Once this obstacle caused a stumble it can't hit again (we may still overlap).
+  const spent = useRef(false)
   const gameOver = useGameStore((s) => s.gameOver)
 
   // Dev: register with the hitbox overlay; unregister on recycle/unmount.
@@ -61,13 +66,23 @@ function ActiveObstacle({
       if (dbg) dbg.z = z.current
     }
 
-    if (hits(player, kind, lane, z.current)) {
-      // Dev god mode: collisions never end the run.
-      if (!(import.meta.env.DEV && useDebugStore.getState().godMode)) {
+    const o = overlap(player, kind, lane, z.current)
+    const hit = o.x && o.y && o.z
+    // Dev god mode: collisions never end the run or stumble.
+    const god = import.meta.env.DEV && useDebugStore.getState().godMode
+    if (hit && !spent.current && !god) {
+      // Head-on = game over; swerving into its side or clipping a corner while
+      // already leaving its lane = a stumble (a second one inside the window kills).
+      const kindOfHit = classifyHit(prev.current.x, prev.current.z, player.lane, lane)
+      if (kindOfHit === 'headOn' || stumble(player) === 'dead') {
         gameOver()
         return
       }
+      spent.current = true
+      if (kindOfHit === 'side') bounceBack(player)
     }
+    prev.current.x = o.x
+    prev.current.z = o.z
 
     if (z.current > CONFIG.recycleZ) onRecycle(id)
   })

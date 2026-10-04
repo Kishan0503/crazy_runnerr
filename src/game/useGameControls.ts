@@ -2,10 +2,17 @@ import { useEffect } from 'react'
 import { inputBus } from './input'
 import { useGameStore } from './store'
 import { activateAbility } from './ability'
+import { CONFIG } from './config'
 import type { Intent } from './types'
 
-/** Minimum touch travel to count as a swipe vs a tap (PRD §6). */
-const SWIPE_THRESHOLD = 24
+/**
+ * Swipe distance needed to fire a move: ~3.5% of the short screen side
+ * (≈22px on a phone, ≈35px on desktop), clamped, times the tunable scale.
+ */
+function swipeThreshold(): number {
+  const base = Math.min(42, Math.max(18, 0.035 * Math.min(window.innerWidth, window.innerHeight)))
+  return base * CONFIG.swipeThresholdScale
+}
 
 /** True when the user is typing in a form field — keep those keys out of the game. */
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -13,6 +20,12 @@ function isTypingTarget(target: EventTarget | null): boolean {
   if (!el) return false
   const tag = el.tagName
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
+}
+
+/** Pointers that start on UI controls (pause, ability, dev panel) never swipe. */
+function isUiTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  return !!el?.closest?.('button, a, input, select, textarea, [data-no-swipe], .lil-gui')
 }
 
 const KEY_MAP: Record<string, Intent> = {
@@ -28,8 +41,13 @@ const KEY_MAP: Record<string, Intent> = {
 }
 
 /**
- * Wires keyboard + touch-swipe input to the shared input bus (PRD §6).
- * Mount once near the app root. On-screen buttons push to the same bus directly.
+ * Wires keyboard + swipe input to the shared input bus (PRD §6). Mount once near
+ * the app root. On-screen buttons push to the same bus directly.
+ *
+ * Swipes use Pointer Events, so touch, mouse-drag and pen share one path. A
+ * swipe fires the moment the pointer has travelled far enough — while the finger
+ * is still moving, not on lift-off — then re-anchors, so one continuous drag can
+ * chain moves (e.g. right, then up).
  */
 export function useGameControls() {
   useEffect(() => {
@@ -57,57 +75,76 @@ export function useGameControls() {
       inputBus.push(intent)
     }
 
-    let startX = 0
-    let startY = 0
-    let tracking = false
+    let anchorX = 0
+    let anchorY = 0
+    let pointerId: number | null = null
 
-    const onTouchStart = (e: TouchEvent) => {
-      // Gate by isPlaying() like onTouchEnd — otherwise a swipe started right
-      // before a collision leaves tracking state armed across the transition
-      // into game-over, and the resulting synthetic click can land on the
-      // canvas instead of the new Game Over screen (first tap "does nothing").
-      if (!isPlaying()) return
-      const t = e.changedTouches[0]
-      startX = t.clientX
-      startY = t.clientY
-      tracking = true
+    const stopTracking = () => {
+      pointerId = null
     }
 
-    const onTouchEnd = (e: TouchEvent) => {
-      if (!tracking) return
-      tracking = false
-      if (!isPlaying()) return
-      const t = e.changedTouches[0]
-      const dx = t.clientX - startX
-      const dy = t.clientY - startY
+    const onPointerDown = (e: PointerEvent) => {
+      // Gate on the phase so a swipe started right before a collision can't stay
+      // armed into game-over (where its stray click would eat the first tap on
+      // the Game Over screen).
+      if (!isPlaying() || pointerId !== null) return
+      if (e.pointerType === 'mouse' && e.button !== 0) return
+      if (isUiTarget(e.target)) return
+      pointerId = e.pointerId
+      anchorX = e.clientX
+      anchorY = e.clientY
+    }
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return
+      if (!isPlaying()) {
+        stopTracking()
+        return
+      }
+      const dx = e.clientX - anchorX
+      const dy = e.clientY - anchorY
       const adx = Math.abs(dx)
       const ady = Math.abs(dy)
+      if (Math.max(adx, ady) < swipeThreshold()) return
 
-      // Below threshold → treat as a tap, not a swipe (used for start/retry later).
-      if (Math.max(adx, ady) < SWIPE_THRESHOLD) return
+      // Dominant axis decides the move; fire now, mid-gesture.
+      if (adx > ady) inputBus.push(dx > 0 ? 'right' : 'left')
+      else inputBus.push(dy > 0 ? 'slide' : 'jump')
 
-      if (adx > ady) {
-        inputBus.push(dx > 0 ? 'right' : 'left')
-      } else {
-        inputBus.push(dy > 0 ? 'slide' : 'jump')
-      }
+      // Re-anchor so continuing the drag in a new direction is a second move.
+      anchorX = e.clientX
+      anchorY = e.clientY
     }
 
-    // touchmove preventDefault keeps the page from scrolling/zooming mid-swipe.
+    const onPointerEnd = (e: PointerEvent) => {
+      if (e.pointerId === pointerId) stopTracking()
+    }
+
+    // Belt and braces with CSS `touch-action: none`: stop iOS scroll/zoom mid-swipe.
     const onTouchMove = (e: TouchEvent) => {
-      if (tracking) e.preventDefault()
+      if (pointerId !== null) e.preventDefault()
     }
+
+    // Leaving 'playing' (game over, pause) always drops an in-flight swipe.
+    const unsubscribe = useGameStore.subscribe((s, prev) => {
+      if (s.phase !== prev.phase && s.phase !== 'playing') stopTracking()
+    })
 
     window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('touchstart', onTouchStart, { passive: true })
+    window.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerEnd)
+    window.addEventListener('pointercancel', onPointerEnd)
     window.addEventListener('touchmove', onTouchMove, { passive: false })
-    window.addEventListener('touchend', onTouchEnd, { passive: true })
 
     return () => {
+      unsubscribe()
       window.removeEventListener('keydown', onKeyDown)
-      window.removeEventListener('touchstart', onTouchStart)
+      window.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerEnd)
+      window.removeEventListener('pointercancel', onPointerEnd)
       window.removeEventListener('touchmove', onTouchMove)
-      window.removeEventListener('touchend', onTouchEnd)
     }
   }, [])
 }

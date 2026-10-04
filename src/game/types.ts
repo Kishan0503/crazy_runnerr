@@ -26,4 +26,28 @@ export interface PlayerRuntime {
   scaleY: number
   /** accumulated running time, drives the procedural run bob */
   runTime: number
+  /** gravity fixed at take-off (speed-scaled), so a tier change can't warp an arc */
+  jumpGravity: number
+  /** seconds left on a jump pressed while airborne (fires on landing) */
+  jumpBuffer: number
+  /** slamming down after a mid-air slide input */
+  fastFalling: boolean
+  /** start a slide on the landing frame (set by fast-fall) */
+  slideOnLand: boolean
+  /** lane before the last switch — side-hit stumbles bounce back here */
+  prevLane: number
+  /** increments on every jump start, so animation clips can restart */
+  jumpSeq: number
+  /** increments on every slide start (same reason) */
+  slideSeq: number
+  /** seconds left in the "already stumbled" window; > 0 means next stumble kills */
+  stumbleTimer: number
+  /** increments on every stumble, so the rig/HUD can play feedback once */
+  stumbleSeq: number
 }
+
+/** Outcome of a stumble: survivable once per window, fatal inside it. */
+export type StumbleResult = 'stumbled' | 'dead'
+
+/** How an obstacle collision happened (decides death vs stumble). */
+export type HitKind = 'headOn' | 'side' | 'clip'

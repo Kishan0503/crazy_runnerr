@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { world } from '../game/world'
+import { player } from '../game/playerState'
 import { CONFIG } from '../game/config'
 import { scoreOf, useGameStore } from '../game/store'
 import { activateAbility, getAbilitySnapshot } from '../game/ability'
@@ -110,6 +111,9 @@ export function Hud() {
   const distRef = useRef<HTMLSpanElement>(null)
   const coinRef = useRef<HTMLSpanElement>(null)
   const scoreRef = useRef<HTMLSpanElement>(null)
+  const warnRef = useRef<HTMLDivElement>(null)
+  const warnBarRef = useRef<HTMLDivElement>(null)
+  const flashRef = useRef<HTMLDivElement>(null)
 
   // Swipe hint: visible briefly at the start of each run, then fades.
   const [hintFading, setHintFading] = useState(false)
@@ -122,12 +126,31 @@ export function Hud() {
 
   useEffect(() => {
     let raf = 0
+    let lastStumble = player.stumbleSeq
+    let lastRun = world.runId
     const tick = () => {
       const coins = useGameStore.getState().coins
       if (distRef.current) distRef.current.textContent = String(Math.floor(world.distance))
       if (coinRef.current) coinRef.current.textContent = String(coins)
       if (scoreRef.current)
         scoreRef.current.textContent = String(scoreOf(world.distance, coins, CONFIG.coinValue))
+
+      // Stumble warning: visible while the "next stumble is fatal" window runs,
+      // its bar draining to empty. Updated imperatively like the numbers above.
+      const left = player.stumbleTimer
+      if (warnRef.current) warnRef.current.style.opacity = left > 0 ? '1' : '0'
+      if (warnBarRef.current)
+        warnBarRef.current.style.transform = `scaleX(${Math.min(1, left / CONFIG.stumbleWindow)})`
+
+      // Red edge flash, once per new stumble (counters reset on a new run).
+      if (world.runId !== lastRun) {
+        lastRun = world.runId
+        lastStumble = player.stumbleSeq
+      }
+      if (player.stumbleSeq !== lastStumble) {
+        lastStumble = player.stumbleSeq
+        flashRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 350, easing: 'ease-out' })
+      }
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -139,6 +162,26 @@ export function Hud() {
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10">
+      {/* Stumble: red edge flash (animated imperatively on each new stumble). */}
+      <div
+        ref={flashRef}
+        className="absolute inset-0 opacity-0"
+        style={{ boxShadow: 'inset 0 0 90px 24px rgba(255,40,60,0.55)' }}
+      />
+
+      {/* Stumble warning: shown while another stumble would end the run. */}
+      <div
+        ref={warnRef}
+        className="absolute left-1/2 top-[6.5rem] -translate-x-1/2 opacity-0 transition-opacity duration-200"
+      >
+        <div className="cr-panel flex flex-col items-center gap-1.5 border-red-400/60 px-4 py-2">
+          <span className="text-sm font-bold uppercase tracking-wider text-red-300">⚠ Careful!</span>
+          <div className="h-1 w-24 overflow-hidden rounded-full bg-white/10">
+            <div ref={warnBarRef} className="h-full w-full origin-left rounded-full bg-red-400" />
+          </div>
+        </div>
+      </div>
+
       {/* Top-left: coin pill + best-distance card */}
       <div className="cr-hud-in absolute left-4 top-4 flex flex-col gap-3">
         <div className="cr-panel flex w-fit items-center gap-2 px-3 py-2">

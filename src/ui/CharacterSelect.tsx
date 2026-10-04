@@ -5,6 +5,7 @@ import { useAnimations, useGLTF } from '@react-three/drei'
 import { Box3, Group, MathUtils, Matrix4, Mesh, Object3D, SkinnedMesh, Vector3 } from 'three'
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js'
 import { useCharacterStore } from '../game/characterStore'
+import { stripRootMotion } from '../game/animation'
 import { cosmeticTint, type Character } from '../game/characters'
 import { useAuthStore } from '../game/auth'
 import { useGameStore } from '../game/store'
@@ -84,7 +85,9 @@ function PreviewModel({ url, yawRef }: { url: string; yawRef: { current: number 
     })
     return c
   }, [scene])
-  const { actions, names } = useAnimations(animations, model)
+  // Same in-place rule as the in-game rig, so a drifting clip can't walk the preview off-frame.
+  const inPlace = useMemo(() => stripRootMotion(animations), [animations])
+  const { actions, names } = useAnimations(inPlace, model)
 
   // Play the idle clip on a loop.
   useEffect(() => {

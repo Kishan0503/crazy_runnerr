@@ -24,6 +24,14 @@ export const CONFIG = {
   laneLerp: 13, // higher = snappier lane switching
   slideLerp: 16, // squash/stretch easing for slide
 
+  // ---- Controls feel (Phase 1) ----
+  inputBufferTime: 0.13, // seconds an early (mid-air) jump press is remembered
+  fastFallVelocity: 24, // downward speed the instant you swipe down mid-air
+  fastFallGravityMult: 2.2, // extra gravity while fast-falling
+  jumpSpeedScaling: 0.5, // 0 = same air time at all speeds, 1 = same jump distance
+  stumbleWindow: 8, // seconds after a stumble during which another one is fatal
+  swipeThresholdScale: 1, // multiplier on the screen-relative swipe distance
+
   // ---- Speed: distance-stepped tiers, NOT continuous (§ updated mechanic) ----
   // Base forward speed = the 1.0x tier. Speed steps up by `speedTierStep` at each
   // cumulative distance in `speedTierThresholds`, up to `speedMaxTier`, then holds

@@ -1,10 +1,12 @@
 import { inputBus } from '../game/input'
 import { useGameStore } from '../game/store'
+import { useSettings } from '../game/settings'
 import type { Intent } from '../game/types'
 
 /**
  * On-screen control buttons — the touch fallback from the controls matrix (§6).
- * Rendered only on coarse-pointer (touch) devices; desktop uses keyboard.
+ * Off by default (swipe only); when enabled in settings, rendered only on
+ * coarse-pointer (touch) devices. Desktop uses keyboard / mouse-drag.
  *
  * The container is pointer-events-none so it never steals gameplay swipes;
  * only the buttons themselves are interactive (§5).
@@ -35,8 +37,10 @@ function ControlButton({ intent, label }: { intent: Intent; label: string }) {
 
 export function TouchControls() {
   const phase = useGameStore((s) => s.phase)
-  // Touch fallback only on touch devices, and only while actually playing.
-  if (!isCoarsePointer || phase !== 'playing') return null
+  const enabled = useSettings((s) => s.showTouchButtons)
+  // Swipe-only by default (the buttons covered the swipe area); opt-in via
+  // settings, and then only on touch devices while actually playing.
+  if (!enabled || !isCoarsePointer || phase !== 'playing') return null
 
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between p-5 pb-8">
