@@ -22,6 +22,8 @@ interface World {
   dz: number
   /** incremented on every fresh run; lets the scene drop stale obstacles at once */
   runId: number
+  /** simulation speed multiplier: 1 normally, < 1 during the death slow-mo */
+  timeScale: number
 }
 
 export const world: World = {
@@ -31,6 +33,7 @@ export const world: World = {
   distance: 0,
   dz: 0,
   runId: 0,
+  timeScale: 1,
 }
 
 /** Reset to a fresh run (called on start / retry so nothing leaks between runs). */
@@ -39,5 +42,6 @@ export function resetWorld() {
   world.distance = 0
   world.dz = 0
   world.runId++
+  world.timeScale = 1
   world.running = true
 }

@@ -32,6 +32,19 @@ export const CONFIG = {
   stumbleWindow: 8, // seconds after a stumble during which another one is fatal
   swipeThresholdScale: 1, // multiplier on the screen-relative swipe distance
 
+  // ---- Feedback / juice (Phase 2) ----
+  deathSlowMo: 0.15, // world speed during the death beat (fraction of normal)
+  deathSlowMoTime: 0.5, // real seconds of slow-mo before the Game Over screen
+  gameOverLock: 0.6, // seconds the Game Over screen ignores taps/keys
+  shakeMax: 0.35, // max camera offset (units) at full trauma
+  shakeDecay: 1.6, // trauma lost per second
+  traumaCrash: 1, // trauma added by each event (0..1)
+  traumaStumble: 0.45,
+  traumaHardLand: 0.15,
+  fovKick: 7, // extra degrees on a speed-tier change (eases back)
+  fovPerTier: 1.5, // permanent extra degrees per speed tier reached
+  milestoneStep: 500, // metres between "500 m!" banners
+
   // ---- Speed: distance-stepped tiers, NOT continuous (§ updated mechanic) ----
   // Base forward speed = the 1.0x tier. Speed steps up by `speedTierStep` at each
   // cumulative distance in `speedTierThresholds`, up to `speedMaxTier`, then holds

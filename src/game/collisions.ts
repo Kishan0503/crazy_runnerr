@@ -45,6 +45,21 @@ export function overlap(player: PlayerRuntime, kind: ObstacleKind, lane: number,
 }
 
 /**
+ * Vertical clearance while passing an obstacle (units, > 0 = clear): how far the
+ * feet were above a low barrier's top, or the head below an overhead bar's
+ * bottom. Uses the unforgiven box so "tight" means visibly tight. Blocks can't be
+ * cleared vertically → Infinity.
+ */
+export function verticalClearance(player: PlayerRuntime, kind: ObstacleKind): number {
+  const spec = HITBOXES[kind]
+  const top = spec.centerY + spec.size[1] / 2
+  const bottom = spec.centerY - spec.size[1] / 2
+  if (kind === 'low') return player.y - top
+  if (kind === 'overhead') return bottom - (player.y + CONFIG.runnerHeight * player.scaleY)
+  return Infinity
+}
+
+/**
  * True when the hitboxes overlap on all three axes:
  *   - low      → cleared by jumping (feet rise above the barrier's top)
  *   - overhead → cleared by sliding (head drops below the bar's bottom)

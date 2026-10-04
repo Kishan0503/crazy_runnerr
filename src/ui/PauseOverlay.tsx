@@ -1,4 +1,5 @@
 import { useGameStore } from '../game/store'
+import { MuteButton } from './MuteButton'
 
 /**
  * Pause overlay (optional, PRD §5). Freezes the loop (the store already set
@@ -14,6 +15,7 @@ export function PauseOverlay() {
 
   return (
     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-7 bg-black/55 px-6 text-center backdrop-blur-sm">
+      <MuteButton className="absolute right-4 top-4 h-10 w-10 rounded-xl" />
       <h2 className="cr-title text-5xl"><span className="cr-word-1">Paused</span></h2>
       <div className="flex flex-col items-center gap-4">
         <button

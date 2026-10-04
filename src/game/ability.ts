@@ -1,3 +1,5 @@
+import { emit } from './events'
+
 /**
  * Character ability engine (singleton runtime, like `world` / `player`).
  *
@@ -53,6 +55,7 @@ export function activateAbility(): boolean {
   if (ability.timer > 0) return false // already active
   ability.charges--
   ability.timer = ability.def.duration
+  emit('abilityOn', { id: ability.def.id })
   return true
 }
 
@@ -60,7 +63,10 @@ export function activateAbility(): boolean {
 export function tickAbility(dt: number) {
   if (ability.timer > 0) {
     ability.timer -= dt
-    if (ability.timer < 0) ability.timer = 0
+    if (ability.timer <= 0) {
+      ability.timer = 0
+      if (ability.id) emit('abilityOff', { id: ability.id })
+    }
   }
 }
 

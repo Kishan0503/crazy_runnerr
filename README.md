@@ -32,6 +32,7 @@ localStorage).
 | `npm test` | Run unit tests once (Vitest) |
 | `npm run test:watch` | Run tests in watch mode |
 | `npm run typecheck` | Type-check only |
+| `npm run audio:build` | Rebuild `public/audio` from raw sources (`raw/audio`, not in git) using `tools/audio-manifest.json` |
 
 ## Dev tools (development builds only)
 
@@ -54,9 +55,11 @@ src/
   game/      gameplay logic + state (pure, unit-tested; no rendering)
     debug/   dev-only tuning panel and debug flags
   scene/     3D world inside the React Three Fiber <Canvas>
-  ui/        DOM overlays: menus, HUD, modals
+  ui/        DOM overlays: menus, HUD, banners, modals
+  audio/     sound manifest + Howler audio manager
   lib/       Supabase client
 supabase/    backend config and schema migrations
+tools/       asset pipeline scripts (audio conversion)
 public/      static assets (models, favicon)
 ```
 

@@ -381,3 +381,57 @@ button:disabled {
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Phase 2 feedback: pop-up banners + speed lines.
+ * ------------------------------------------------------------------------- */
+.cr-banner,
+.cr-banner-small {
+  position: absolute;
+  white-space: nowrap;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.45), 0 0 22px rgba(120, 170, 255, 0.45);
+  animation: cr-banner-pop 1.3s cubic-bezier(0.2, 0.9, 0.25, 1.2) both;
+}
+.cr-banner-small {
+  animation: cr-banner-small 0.8s ease-out both;
+}
+@keyframes cr-banner-pop {
+  0% { opacity: 0; transform: scale(0.4); }
+  14% { opacity: 1; transform: scale(1.12); }
+  24% { transform: scale(1); }
+  78% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.08) translateY(-12px); }
+}
+@keyframes cr-banner-small {
+  0% { opacity: 0; transform: translateY(8px) scale(0.7); }
+  20% { opacity: 1; transform: translateY(0) scale(1.05); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-18px) scale(1); }
+}
+/* Radial streaks converging toward the vanishing point (upper middle). */
+.cr-speed-lines {
+  background: repeating-conic-gradient(
+    from 0deg at 50% 38%,
+    rgba(190, 220, 255, 0.55) 0deg 0.6deg,
+    transparent 0.6deg 7deg
+  );
+  -webkit-mask-image: radial-gradient(circle at 50% 38%, transparent 0 32%, #000 70%);
+  mask-image: radial-gradient(circle at 50% 38%, transparent 0 32%, #000 70%);
+}
+@media (prefers-reduced-motion: reduce) {
+  /* No scaling/movement: just fade in, hold, fade out. */
+  .cr-banner,
+  .cr-banner-small {
+    animation-name: cr-banner-fade;
+  }
+  .cr-speed-lines {
+    display: none;
+  }
+}
+
+@keyframes cr-banner-fade {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}

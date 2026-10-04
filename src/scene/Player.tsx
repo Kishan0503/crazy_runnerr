@@ -12,6 +12,9 @@ import { world } from '../game/world'
 import { useGameStore } from '../game/store'
 import { useCharacterStore } from '../game/characterStore'
 import { stripRootMotion } from '../game/animation'
+import { emit } from '../game/events'
+import { fx, nowSec } from '../game/fxState'
+import type { PlayerRuntime } from '../game/types'
 import { ModelBoundary } from './Model'
 
 /**
@@ -40,6 +43,36 @@ const STUMBLE_HOP = 0.22 // little hop height during the wobble
 // Clip blending: normal state changes vs the "instant" ones (cancel / fast-fall).
 const FADE = 0.15
 const FADE_FAST = 0.08
+type Snapshot = ReturnType<typeof snapshot>
+function snapshot(s: PlayerRuntime) {
+  return {
+    jumpSeq: s.jumpSeq,
+    slideSeq: s.slideSeq,
+    grounded: s.grounded,
+    fastFalling: s.fastFalling,
+    lane: s.lane,
+    stumbleSeq: s.stumbleSeq,
+  }
+}
+
+/**
+ * Turn this frame's player state changes into feedback events (sound, dust,
+ * shake…). Also records when each lane was left, for late-dodge near misses.
+ * A lane change caused by a stumble bounce-back is not a player move.
+ */
+function emitPlayerEvents(s: PlayerRuntime, prev: Snapshot) {
+  if (s.jumpSeq !== prev.jumpSeq) emit('jump', { buffered: !prev.grounded })
+  if (s.slideSeq !== prev.slideSeq) emit('slide')
+  if (s.fastFalling && !prev.fastFalling) emit('fastFall')
+  if (s.grounded && !prev.grounded) emit('land', { hard: prev.fastFalling })
+  if (s.lane !== prev.lane) {
+    fx.laneLeftAt[prev.lane] = nowSec()
+    const bounced = s.stumbleSeq !== prev.stumbleSeq
+    if (!bounced) emit('laneChange', { dir: s.lane > prev.lane ? 1 : -1 })
+  }
+  Object.assign(prev, snapshot(s))
+}
+
 /** Expected air time of the current jump. Height (v²/2g) is speed-independent,
  *  so air time follows from the gravity locked in at take-off: T = 2·√(2H/g).
  *  Read live (not cached) so tuning-panel changes apply immediately. */
@@ -68,6 +101,8 @@ export function Player() {
   const prevX = useRef(player.x)
   const lastStumble = useRef(player.stumbleSeq)
   const lastRun = useRef(world.runId)
+  // Last frame's player state, to turn changes into feedback events.
+  const seen = useRef(snapshot(player))
   const wobble = useRef(0) // seconds left in the stumble wobble
   // The equipped character's model URL. Used to KEY PlayerModel so a character
   // swap forces a clean remount (fresh skeleton, fresh useAnimations mixer, fresh
@@ -81,8 +116,29 @@ export function Player() {
   const charLoaded = useCharacterStore((s) => s.loaded)
 
   useFrame((_, delta) => {
-    if (!world.running) return
-    const dt = Math.min(delta, 0.05) // clamp so a tab refocus can't teleport (§8.3)
+    if (!world.running) {
+      // Frozen (start screen, pause, game over): no simulation, but keep the
+      // model glued to the player STATE. Quitting to the menu resets that state
+      // to the middle lane — without this sync the model stayed where it crashed.
+      const o = outer.current
+      if (o) {
+        o.position.x = player.x
+        o.position.y = player.y
+        o.rotation.z = 0
+        o.scale.y = animMode.current === 'procedural' ? player.scaleY : 1
+      }
+      wobble.current = 0
+      // Back on the start screen: also drop any leftover procedural pose.
+      const a = anim.current
+      if (a && useGameStore.getState().phase === 'start') {
+        a.rotation.set(0, 0, 0)
+        a.position.y = 0
+        a.scale.y = 1
+      }
+      return
+    }
+    // Clamp so a tab refocus can't teleport (§8.3); scale for the death slow-mo.
+    const dt = Math.min(delta, 0.05) * world.timeScale
     const s = player
     const speedMult = speedMultiplierAt(world.distance)
 
@@ -94,7 +150,9 @@ export function Player() {
       lastRun.current = world.runId
       lastStumble.current = s.stumbleSeq
       wobble.current = 0
+      Object.assign(seen.current, snapshot(s))
     }
+    emitPlayerEvents(s, seen.current)
 
     // Stumble feedback: a short wobble + hop, restarted on each new stumble.
     if (s.stumbleSeq !== lastStumble.current) {
@@ -173,7 +231,7 @@ export function Player() {
   })
 
   return (
-    <group ref={outer} position={[CONFIG.lanes[1], 0, CONFIG.runnerZ]}>
+    <group ref={outer} name="player-rig" position={[CONFIG.lanes[1], 0, CONFIG.runnerZ]}>
       <group ref={anim}>
         {/* Show NOTHING while the model loads — no placeholder flash. The capsule
             placeholder is kept only as the error fallback for a genuinely
@@ -296,7 +354,7 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
   // Play every clip in place: forward travel comes from the scrolling world, so
   // root motion baked into a clip (the default Runner's jump/slide) is removed.
   const inPlace = useMemo(() => stripRootMotion(animations), [animations])
-  const { actions, names } = useAnimations(inPlace, ref)
+  const { actions, names, mixer } = useAnimations(inPlace, ref)
   const hasClips = animations.length > 0
   const clips = useMemo(() => matchClips(names), [names])
   const current = useRef('')
@@ -335,6 +393,8 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
   useFrame((_, delta) => {
     if (!hasClips) return
     const dt = Math.min(delta, 0.05)
+    // Animations slow down with the world during the death slow-mo.
+    mixer.timeScale = world.timeScale
     const s = player
     const phase = useGameStore.getState().phase
     const starting = useGameStore.getState().starting

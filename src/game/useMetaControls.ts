@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useGameStore } from './store'
+import { gameOverUnlocked, useGameStore } from './store'
 import { useAuthUi } from '../ui/AuthModal'
 import { useCharacterUi } from '../ui/CharacterSelect'
 
@@ -32,7 +32,7 @@ export function useMetaControls() {
           beginStart()
         } else if (phase === 'gameover') {
           e.preventDefault()
-          start()
+          if (gameOverUnlocked()) start()
         } else if (phase === 'paused') {
           e.preventDefault()
           resume()

@@ -6,7 +6,10 @@ import type { ObstacleKind } from '../game/config'
 import { world } from '../game/world'
 import { player } from '../game/playerState'
 import { isMagnetActive } from '../game/ability'
-import { classifyHit, collectsCoin, overlap } from '../game/collisions'
+import { classifyHit, collectsCoin, overlap, verticalClearance } from '../game/collisions'
+import { emit } from '../game/events'
+import { bumpStreak, isNearMiss } from '../game/feedback'
+import { fx, nowSec } from '../game/fxState'
 import { bounceBack, stumble } from '../game/player'
 import { nextObstacleId, tickSpawner } from '../game/spawn'
 import { useGameStore } from '../game/store'
@@ -15,6 +18,8 @@ import { Coin } from './Coin'
 import { debugObstacles, useDebugStore } from '../game/debug/flags'
 
 const COIN_SPACING = 2.2 // depth gap between coins in a run
+/** Depth past the player at which an obstacle counts as "passed" (near-miss check). */
+const PASS_Z = 0.8
 
 interface ActiveObs {
   id: number
@@ -46,7 +51,11 @@ function ActiveObstacle({
   const prev = useRef({ x: false, z: false })
   // Once this obstacle caused a stumble it can't hit again (we may still overlap).
   const spent = useRef(false)
-  const gameOver = useGameStore((s) => s.gameOver)
+  // Near-miss bookkeeping: tightest vertical clearance while level with us,
+  // and whether we've already judged this obstacle as it passed.
+  const minClearance = useRef(Infinity)
+  const judged = useRef(false)
+  const crash = useGameStore((s) => s.crash)
 
   // Dev: register with the hitbox overlay; unregister on recycle/unmount.
   useEffect(() => {
@@ -75,14 +84,35 @@ function ActiveObstacle({
       // already leaving its lane = a stumble (a second one inside the window kills).
       const kindOfHit = classifyHit(prev.current.x, prev.current.z, player.lane, lane)
       if (kindOfHit === 'headOn' || stumble(player) === 'dead') {
-        gameOver()
+        crash()
         return
       }
       spent.current = true
       if (kindOfHit === 'side') bounceBack(player)
+      emit('stumble')
     }
     prev.current.x = o.x
     prev.current.z = o.z
+
+    // Near miss (visual only): judged once, the moment it passes the player
+    // without having hit — a late lane dodge or a tight jump/slide over/under.
+    if (o.x && o.z && !hit) minClearance.current = Math.min(minClearance.current, verticalClearance(player, kind))
+    if (!judged.current && z.current > CONFIG.runnerZ + PASS_Z) {
+      judged.current = true
+      const now = nowSec()
+      if (
+        !spent.current &&
+        useGameStore.getState().phase === 'playing' &&
+        isNearMiss({
+          sinceLeftLane: player.lane === lane ? Infinity : now - fx.laneLeftAt[lane],
+          clearance: minClearance.current,
+          sinceLast: now - fx.lastNearMiss,
+        })
+      ) {
+        fx.lastNearMiss = now
+        emit('nearMiss')
+      }
+    }
 
     if (z.current > CONFIG.recycleZ) onRecycle(id)
   })
@@ -111,7 +141,7 @@ function ActiveCoin({
 
   useFrame((_, delta) => {
     if (!world.running) return
-    const dt = Math.min(delta, 0.05)
+    const dt = Math.min(delta, 0.05) * world.timeScale
 
     z.current += world.dz
 
@@ -136,6 +166,7 @@ function ActiveCoin({
       : collectsCoin(player, lane, z.current)
     if (collected) {
       collectCoin()
+      emit('coin', { streak: bumpStreak(fx.streak, nowSec()) })
       onRemove(id)
       return
     }

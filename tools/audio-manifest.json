@@ -1,0 +1,28 @@
+{
+  "$comment": "Source → game sound mapping for `npm run audio:build`. Paths are relative to raw/audio (gitignored). Swap a source here and re-run to change a sound. Loop music: start/end trim the usable region (seconds; negative end = from the end), crossfade blends the loop seam.",
+  "sfx": {
+    "jump": "kenney_digital-audio/Audio/phaseJump1.ogg",
+    "land": "kenney_impact-sounds/Audio/footstep_concrete_000.ogg",
+    "landHard": "kenney_impact-sounds/Audio/impactSoft_heavy_000.ogg",
+    "whoosh": "whoosh-1.mp3",
+    "coin": "coin.mp3",
+    "stumble": "kenney_impact-sounds/Audio/impactPunch_medium_000.ogg",
+    "crash": "kenney_impact-sounds/Audio/impactPunch_heavy_000.ogg",
+    "crashMetal": "kenney_impact-sounds/Audio/impactMetal_heavy_000.ogg",
+    "speedUp": "kenney_digital-audio/Audio/powerUp2.ogg",
+    "milestone": "kenney_digital-audio/Audio/threeTone1.ogg",
+    "newBest": "kenney_digital-audio/Audio/zapThreeToneUp.ogg",
+    "abilityOn": "kenney_digital-audio/Audio/powerUp7.ogg",
+    "abilityOff": "kenney_digital-audio/Audio/lowDown.ogg",
+    "click": "kenney_interface-sounds/Audio/select_001.ogg",
+    "toggle": "kenney_interface-sounds/Audio/toggle_001.ogg"
+  },
+  "jingles": {
+    "jingleGameOver": "kenney_music-jingles/Audio/Steel jingles/jingles_STEEL01.ogg",
+    "jingleNewBest": "kenney_music-jingles/Audio/Hit jingles/jingles_HIT11.ogg"
+  },
+  "music": {
+    "musicMenu": { "src": "music-menu.mp3", "start": 0, "end": 0, "crossfade": 0.5 },
+    "musicRun": { "src": "music-run.mp3", "start": 0.6, "end": -4.6, "crossfade": 1.5 }
+  }
+}

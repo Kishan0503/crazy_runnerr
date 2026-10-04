@@ -1,4 +1,6 @@
-import { useGameStore } from '../game/store'
+import { useEffect, useState } from 'react'
+import { gameOverUnlocked, useGameStore } from '../game/store'
+import { CONFIG } from '../game/config'
 
 /** A labeled stat block for the game-over summary. */
 function Stat({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
@@ -29,7 +31,26 @@ export function GameOverScreen() {
   const best = useGameStore((s) => s.best)
   const coins = useGameStore((s) => s.coins)
 
+  // Tap-lock: ignore input for a moment after the screen appears, so a swipe
+  // still in progress at the moment of death can't instantly skip the results.
+  const [unlocked, setUnlocked] = useState(false)
+  useEffect(() => {
+    if (phase !== 'gameover') return
+    setUnlocked(false)
+    const t = setTimeout(() => setUnlocked(true), CONFIG.gameOverLock * 1000)
+    return () => clearTimeout(t)
+  }, [phase])
+
   if (phase !== 'gameover') return null
+
+  const retry = () => {
+    if (!gameOverUnlocked()) return
+    start()
+  }
+  const toMenu = () => {
+    if (!gameOverUnlocked()) return
+    quit()
+  }
 
   const isNewBest = lastDistance >= best && lastDistance > 0
 
@@ -39,7 +60,7 @@ export function GameOverScreen() {
       // pointerdown (not click) so retry fires on first contact — a synthetic
       // click after touchend can land back on the canvas if a swipe/tap was
       // still in flight the instant gameOver() swapped this screen in.
-      onPointerDown={() => start()}
+      onPointerDown={retry}
     >
       <div className="flex flex-col items-center gap-3">
         {isNewBest && (
@@ -61,9 +82,9 @@ export function GameOverScreen() {
           type="button"
           onPointerDown={(e) => {
             e.stopPropagation()
-            start()
+            retry()
           }}
-          className="cr-play pointer-events-auto px-9 py-4 text-lg"
+          className={`cr-play pointer-events-auto px-9 py-4 text-lg transition-opacity duration-300 ${unlocked ? '' : 'opacity-40'}`}
         >
           Tap to retry
         </button>
@@ -71,9 +92,9 @@ export function GameOverScreen() {
           type="button"
           onPointerDown={(e) => {
             e.stopPropagation()
-            quit()
+            toMenu()
           }}
-          className="cr-panel pointer-events-auto px-7 py-4 text-lg font-semibold text-white/80 hover:text-white"
+          className={`cr-panel pointer-events-auto px-7 py-4 text-lg font-semibold text-white/80 transition-opacity duration-300 hover:text-white ${unlocked ? '' : 'opacity-40'}`}
         >
           Quit to Main Menu
         </button>

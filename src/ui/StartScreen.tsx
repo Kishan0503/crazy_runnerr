@@ -5,6 +5,7 @@ import { useCharacterStore } from '../game/characterStore'
 import { cosmeticTint } from '../game/characters'
 import { useAuthUi } from './AuthModal'
 import { useCharacterUi } from './CharacterSelect'
+import { MuteButton } from './MuteButton'
 
 /* ----------------------------- inline icons ------------------------------ */
 function CoinIcon({ className = '' }: { className?: string }) {
@@ -43,14 +44,6 @@ function TrophyGlyph() {
       <path d="M7 4h10v4a5 5 0 0 1-10 0V4z" />
       <path d="M7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3" />
       <path d="M12 13v3M9 20h6M10 20l.5-4h3l.5 4" />
-    </svg>
-  )
-}
-function GearGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1" />
     </svg>
   )
 }
@@ -221,9 +214,8 @@ export function StartScreen() {
           <button type="button" aria-label="Leaderboard" className="cr-icon-btn h-10 w-10 rounded-xl">
             <TrophyGlyph />
           </button>
-          <button type="button" aria-label="Settings" className="cr-icon-btn h-10 w-10 rounded-xl">
-            <GearGlyph />
-          </button>
+          {/* Sound toggle (stands in for Settings until the Phase 7 menu). */}
+          <MuteButton className="h-10 w-10 rounded-xl" />
         </div>
       </div>
 

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { world } from '../game/world'
 import { player } from '../game/playerState'
+import { on } from '../game/events'
+import { MuteButton } from './MuteButton'
 import { CONFIG } from '../game/config'
 import { scoreOf, useGameStore } from '../game/store'
 import { activateAbility, getAbilitySnapshot } from '../game/ability'
@@ -114,6 +116,19 @@ export function Hud() {
   const warnRef = useRef<HTMLDivElement>(null)
   const warnBarRef = useRef<HTMLDivElement>(null)
   const flashRef = useRef<HTMLDivElement>(null)
+  const coinPillRef = useRef<HTMLDivElement>(null)
+
+  // Coin pill pops on every pickup (Web Animations — no React re-render).
+  useEffect(
+    () =>
+      on('coin', () =>
+        coinPillRef.current?.animate(
+          [{ transform: 'scale(1)' }, { transform: 'scale(1.22)' }, { transform: 'scale(1)' }],
+          { duration: 180, easing: 'ease-out' },
+        ),
+      ),
+    [],
+  )
 
   // Swipe hint: visible briefly at the start of each run, then fades.
   const [hintFading, setHintFading] = useState(false)
@@ -158,7 +173,7 @@ export function Hud() {
   }, [])
 
   // Visible during play and pause (frozen numbers behind the pause overlay).
-  if (phase !== 'playing' && phase !== 'paused') return null
+  if (phase !== 'playing' && phase !== 'paused' && phase !== 'dying') return null
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10">
@@ -184,7 +199,7 @@ export function Hud() {
 
       {/* Top-left: coin pill + best-distance card */}
       <div className="cr-hud-in absolute left-4 top-4 flex flex-col gap-3">
-        <div className="cr-panel flex w-fit items-center gap-2 px-3 py-2">
+        <div ref={coinPillRef} className="cr-panel flex w-fit origin-left items-center gap-2 px-3 py-2">
           <CoinIcon />
           <span ref={coinRef} className="text-base font-bold tabular-nums text-amber-200">0</span>
         </div>
@@ -212,7 +227,8 @@ export function Hud() {
         <div className="mx-auto mt-1 h-px w-28 bg-gradient-to-r from-transparent via-[var(--cr-blue-bright)] to-transparent opacity-70" />
       </div>
 
-      {/* Top-right: pause */}
+      {/* Top-right: sound toggle + pause */}
+      <MuteButton className="cr-hud-in absolute right-16 top-4 h-10 w-10 rounded-xl" />
       <button
         type="button"
         aria-label="Pause"

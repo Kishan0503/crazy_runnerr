@@ -1,5 +1,5 @@
-import { Suspense, lazy, useEffect } from 'react'
-import { Canvas, useThree } from '@react-three/fiber'
+import { Suspense, lazy } from 'react'
+import { Canvas } from '@react-three/fiber'
 import { AdaptiveDpr, Preload } from '@react-three/drei'
 import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing'
 import { CONFIG, SCENE_BG } from '../game/config'
@@ -9,24 +9,12 @@ import { Track } from './Track'
 import { Player } from './Player'
 import { ObstacleField } from './ObstacleField'
 import { Environment } from './Environment'
+import { CameraRig } from './CameraRig'
+import { Particles } from './Particles'
 
 // Dev-only debug overlay (stats, hitboxes). `null` in production, so the lazy
 // chunk is never referenced or emitted.
 const DebugScene = import.meta.env.DEV ? lazy(() => import('./debug/DebugScene')) : null
-
-/**
- * Fixed behind-and-above chase camera (PRD §4.1, §8.2). No orbit controls.
- * The default camera is created by <Canvas camera={...}>; here we just aim it
- * once at the look target down the track.
- */
-function ChaseCamera() {
-  const camera = useThree((s) => s.camera)
-  useEffect(() => {
-    camera.lookAt(...CONFIG.cameraLookAt)
-    camera.updateProjectionMatrix()
-  }, [camera])
-  return null
-}
 
 export function GameCanvas() {
   // Remount the obstacle field on each fresh run so a restart never inherits a
@@ -80,7 +68,8 @@ export function GameCanvas() {
           brighten the character without flattening the scene. */}
       <directionalLight position={[0, 4, 12]} intensity={0.55} color="#eaf1ff" />
 
-      <ChaseCamera />
+      {/* Chase camera with shake / FOV kick feedback (Phase 2). */}
+      <CameraRig />
 
       {/* GameLoop mounts first so its useFrame runs before consumers (§8.3). */}
       <GameLoop />
@@ -90,6 +79,7 @@ export function GameCanvas() {
         <Track />
         <Player />
         <ObstacleField key={runId} />
+        <Particles />
         <Preload all />
       </Suspense>
 

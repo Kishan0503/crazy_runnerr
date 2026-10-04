@@ -2,6 +2,7 @@ import { CONFIG } from '../config'
 import { world } from '../world'
 import { perfStats, useDebugStore } from './flags'
 import { useSettings } from '../settings'
+import { emit } from '../events'
 
 /**
  * Live tuning panel (Phase 0, dev only). Binds lil-gui sliders directly to the
@@ -36,6 +37,18 @@ const TUNABLES: Record<string, [TunableKey, number, number, number][]> = {
     ['fastFallGravityMult', 1, 5, 0.1],
   ],
   Rules: [['stumbleWindow', 0, 20, 0.5]],
+  Juice: [
+    ['shakeMax', 0, 1, 0.01],
+    ['shakeDecay', 0.3, 5, 0.1],
+    ['traumaCrash', 0, 1, 0.05],
+    ['traumaStumble', 0, 1, 0.05],
+    ['traumaHardLand', 0, 1, 0.05],
+    ['fovKick', 0, 20, 0.5],
+    ['fovPerTier', 0, 5, 0.1],
+    ['deathSlowMo', 0.02, 1, 0.01],
+    ['deathSlowMoTime', 0, 2, 0.05],
+    ['gameOverLock', 0, 2, 0.05],
+  ],
   Slide: [
     ['slideDuration', 0.3, 1.2, 0.01],
     ['slideLerp', 5, 30, 0.5],
@@ -143,6 +156,47 @@ export async function showTuningPanel() {
   toolsFolder.add(tools, 'jump').name('Jump to distance')
   toolsFolder.add(tools, 'copy').name('Copy as config')
   toolsFolder.add(tools, 'reset').name('Reset to defaults')
+
+  // Audio: live player settings + a tester that plays every sound in turn.
+  const audio = gui.addFolder('Audio')
+  const sound = { ...useSettings.getState() }
+  const setSetting = (patch: Parameters<ReturnType<typeof useSettings.getState>['set']>[0]) =>
+    useSettings.getState().set(patch)
+  audio.add(sound, 'muted').name('Muted').onChange((v: boolean) => setSetting({ muted: v }))
+  audio.add(sound, 'musicVolume', 0, 1, 0.05).name('Music volume').onChange((v: number) => setSetting({ musicVolume: v }))
+  audio.add(sound, 'sfxVolume', 0, 1, 0.05).name('SFX volume').onChange((v: number) => setSetting({ sfxVolume: v }))
+  audio.add(sound, 'vibration').name('Vibration').onChange((v: boolean) => setSetting({ vibration: v }))
+  const audioTools = {
+    playAll: async () => {
+      const { ALL_SFX, playSfx } = await import('../../audio/audio')
+      ALL_SFX.forEach((id, i) =>
+        setTimeout(() => {
+          console.info('[audio] ▶', id)
+          playSfx(id)
+        }, i * 900),
+      )
+    },
+  }
+  audio.add(audioTools, 'playAll').name('▶ Play every sound')
+  audio.close()
+
+  // Preview feedback effects without playing for them.
+  const preview = gui.addFolder('Preview effects')
+  const fire = {
+    speedUp: () => emit('speedTier', { tier: 1 }),
+    milestone: () => emit('milestone', { meters: 500 }),
+    newBest: () => emit('newBest'),
+    nearMiss: () => emit('nearMiss'),
+    stumble: () => emit('stumble'),
+    coin: () => emit('coin', { streak: 1 }),
+  }
+  preview.add(fire, 'speedUp').name('SPEED UP!')
+  preview.add(fire, 'milestone').name('500 m!')
+  preview.add(fire, 'newBest').name('NEW BEST!')
+  preview.add(fire, 'nearMiss').name('CLOSE!')
+  preview.add(fire, 'stumble').name('Stumble shake')
+  preview.add(fire, 'coin').name('Coin pickup')
+  preview.close()
 
   // Read-only renderer stats (updated each frame by DebugScene).
   const perf = gui.addFolder('Perf')
