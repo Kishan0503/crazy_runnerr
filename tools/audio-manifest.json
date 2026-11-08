@@ -15,14 +15,38 @@
     "abilityOn": "kenney_digital-audio/Audio/powerUp7.ogg",
     "abilityOff": "kenney_digital-audio/Audio/lowDown.ogg",
     "click": "kenney_interface-sounds/Audio/select_001.ogg",
-    "toggle": "kenney_interface-sounds/Audio/toggle_001.ogg"
+    "toggle": "kenney_interface-sounds/Audio/toggle_001.ogg",
+    "pickup": "kenney_digital-audio/Audio/powerUp4.ogg",
+    "pickupEnd": "kenney_digital-audio/Audio/pepSound2.ogg",
+    "shieldBreak": "kenney_impact-sounds/Audio/impactGlass_heavy_000.ogg",
+    "hornCar": "car-horn-1.mp3",
+    "hornTruck": {
+      "src": "car-horn-2.mp3",
+      "end": 1.6
+    }
   },
   "jingles": {
     "jingleGameOver": "kenney_music-jingles/Audio/Steel jingles/jingles_STEEL01.ogg",
     "jingleNewBest": "kenney_music-jingles/Audio/Hit jingles/jingles_HIT11.ogg"
   },
   "music": {
-    "musicMenu": { "src": "music-menu.mp3", "start": 0, "end": 0, "crossfade": 0.5 },
-    "musicRun": { "src": "music-run.mp3", "start": 0.6, "end": -4.6, "crossfade": 1.5 }
+    "musicMenu": {
+      "src": "music-menu.mp3",
+      "start": 0,
+      "end": 0,
+      "crossfade": 0.5
+    },
+    "musicRun": {
+      "src": "music-run.mp3",
+      "start": 0.6,
+      "end": -4.6,
+      "crossfade": 1.5
+    },
+    "loopJetpack": {
+      "src": "jetpack.mp3",
+      "start": 0.3,
+      "end": 0,
+      "crossfade": 0.4
+    }
   }
 }

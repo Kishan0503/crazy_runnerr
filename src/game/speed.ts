@@ -9,7 +9,23 @@ import { CONFIG } from './config'
  * frame rate, and the cap keeps long runs fair (§ updated mechanic).
  */
 export function speedMultiplierAt(distance: number): number {
-  const tier = CONFIG.speedTierThresholds.filter((t) => distance >= t).length
-  const mult = 1 + tier * CONFIG.speedTierStep
+  const mult = 1 + speedTierAt(distance) * CONFIG.speedTierStep
   return Math.min(CONFIG.speedMaxTier, mult)
+}
+
+/** Index of the speed tier at a distance (0 = base). Loop, not filter: no allocation per frame. */
+export function speedTierAt(distance: number): number {
+  let tier = 0
+  for (const t of CONFIG.speedTierThresholds) if (distance >= t) tier++
+  return tier
+}
+
+/**
+ * Ease the current speed toward the tier target at a constant acceleration, so
+ * each +25% step arrives over `speedEaseTime` seconds instead of in one frame.
+ */
+export function easeSpeed(current: number, target: number, dt: number, rateMult = 1): number {
+  const rate = ((CONFIG.speedStart * CONFIG.speedTierStep) / CONFIG.speedEaseTime) * rateMult
+  const step = rate * dt
+  return Math.abs(target - current) <= step ? target : current + Math.sign(target - current) * step
 }

@@ -34,6 +34,7 @@ export function createPlayerState(): PlayerRuntime {
     slideSeq: 0,
     stumbleTimer: 0,
     stumbleSeq: 0,
+    flying: false,
   }
 }
 
@@ -81,6 +82,7 @@ export function applyIntent(s: PlayerRuntime, intent: Intent, speedMult = 1) {
       break
     }
     case 'jump':
+      if (s.flying) break // jetpack: jump/slide do nothing while airborne on it
       if (s.grounded) {
         startJump(s, speedMult)
       } else {
@@ -91,6 +93,7 @@ export function applyIntent(s: PlayerRuntime, intent: Intent, speedMult = 1) {
       }
       break
     case 'slide':
+      if (s.flying) break
       if (s.grounded) {
         startSlide(s)
       } else {
@@ -104,22 +107,48 @@ export function applyIntent(s: PlayerRuntime, intent: Intent, speedMult = 1) {
   }
 }
 
+/** Max height the runner simply steps onto (ramp slope); anything taller is a wall. */
+export const STEP_HEIGHT = 0.4
+
 /**
  * Advance the player one frame. `dt` should already be clamped by the caller
  * (§8.3) so a tab refocus can't fling the player through obstacles.
  * `speedMult` is only used if a buffered jump fires on landing.
+ * `floor` is the surface height under the player (0 = road; ramps/rooftops
+ * raise it — Phase 4A). The caller only passes surfaces the player is on or can
+ * step onto; taller ones are walls handled as collisions.
  */
-export function stepPlayer(s: PlayerRuntime, dt: number, speedMult = 1) {
+export function stepPlayer(s: PlayerRuntime, dt: number, speedMult = 1, floor = 0) {
   if (s.jumpBuffer > 0) s.jumpBuffer = Math.max(0, s.jumpBuffer - dt)
   if (s.stumbleTimer > 0) s.stumbleTimer = Math.max(0, s.stumbleTimer - dt)
 
-  // Jump arc: integrate the take-off gravity until we land back on the ground.
-  if (!s.grounded) {
+  // Jetpack flight: rise to (and hover at) altitude; gravity resumes when it ends.
+  if (s.flying) {
+    s.y = MathUtils.damp(s.y, Math.max(floor, CONFIG.jetpackHeight), 5, dt)
+    s.vy = 0
+    s.grounded = false
+    s.fastFalling = false
+    s.sliding = false
+    s.slideOnLand = false
+    s.jumpBuffer = 0
+    s.jumpGravity = CONFIG.gravity
+  } else if (s.grounded) {
+    // Ramps lift you smoothly; walking off a roof / ramp edge drops you.
+    if (floor > s.y) s.y = floor
+    else if (floor < s.y - 0.02) {
+      s.grounded = false
+      s.vy = 0
+      s.jumpGravity = CONFIG.gravity
+    }
+  }
+
+  // Jump arc: integrate the take-off gravity until we land back on the floor.
+  if (!s.grounded && !s.flying) {
     const g = s.jumpGravity * (s.fastFalling ? CONFIG.fastFallGravityMult : 1)
     s.vy -= g * dt
     s.y += s.vy * dt
-    if (s.y <= 0) {
-      s.y = 0
+    if (s.y <= floor && s.vy <= 0) {
+      s.y = floor
       s.vy = 0
       s.grounded = true
       s.fastFalling = false

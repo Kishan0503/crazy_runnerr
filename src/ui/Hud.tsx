@@ -3,6 +3,7 @@ import { world } from '../game/world'
 import { player } from '../game/playerState'
 import { on } from '../game/events'
 import { MuteButton } from './MuteButton'
+import { PickupChips } from './PickupChips'
 import { CONFIG } from '../game/config'
 import { scoreOf, useGameStore } from '../game/store'
 import { activateAbility, getAbilitySnapshot } from '../game/ability'
@@ -143,19 +144,29 @@ export function Hud() {
     let raf = 0
     let lastStumble = player.stumbleSeq
     let lastRun = world.runId
+    // Last values written: the DOM is only touched when a number actually
+    // changes (each write costs a style + layout pass; Phase 4P).
+    let shownDist = -1
+    let shownCoins = -1
+    let shownScore = -1
+    let shownWarn = -1
     const tick = () => {
-      const coins = useGameStore.getState().coins
-      if (distRef.current) distRef.current.textContent = String(Math.floor(world.distance))
-      if (coinRef.current) coinRef.current.textContent = String(coins)
-      if (scoreRef.current)
-        scoreRef.current.textContent = String(scoreOf(world.distance, coins, CONFIG.coinValue))
+      const { coins, bonus } = useGameStore.getState()
+      const dist = Math.floor(world.distance)
+      if (dist !== shownDist && distRef.current) distRef.current.textContent = String((shownDist = dist))
+      if (coins !== shownCoins && coinRef.current) coinRef.current.textContent = String((shownCoins = coins))
+      const score = scoreOf(world.distance, coins, CONFIG.coinValue, bonus)
+      if (score !== shownScore && scoreRef.current) scoreRef.current.textContent = String((shownScore = score))
 
       // Stumble warning: visible while the "next stumble is fatal" window runs,
-      // its bar draining to empty. Updated imperatively like the numbers above.
+      // its bar draining to empty (quantized to 1% so idle frames write nothing).
       const left = player.stumbleTimer
-      if (warnRef.current) warnRef.current.style.opacity = left > 0 ? '1' : '0'
-      if (warnBarRef.current)
-        warnBarRef.current.style.transform = `scaleX(${Math.min(1, left / CONFIG.stumbleWindow)})`
+      const warn = left > 0 ? Math.ceil(Math.min(1, left / CONFIG.stumbleWindow) * 100) : 0
+      if (warn !== shownWarn) {
+        shownWarn = warn
+        if (warnRef.current) warnRef.current.style.opacity = warn > 0 ? '1' : '0'
+        if (warnBarRef.current) warnBarRef.current.style.transform = `scaleX(${warn / 100})`
+      }
 
       // Red edge flash, once per new stumble (counters reset on a new run).
       if (world.runId !== lastRun) {
@@ -196,6 +207,9 @@ export function Hud() {
           </div>
         </div>
       </div>
+
+      {/* Active pickups (Phase 4A). */}
+      <PickupChips />
 
       {/* Top-left: coin pill + best-distance card */}
       <div className="cr-hud-in absolute left-4 top-4 flex flex-col gap-3">
@@ -241,19 +255,9 @@ export function Hud() {
         </svg>
       </button>
 
-      {/* Right-center: multiplier + score */}
+      {/* Right-center: score (the old static "x1" multiplier badge was removed) */}
       <div className="cr-hud-in absolute right-4 top-1/2 hidden -translate-y-1/2 flex-col items-center gap-2 sm:flex">
-        <div
-          className="flex h-14 w-14 items-center justify-center rounded-full border text-lg font-extrabold text-white"
-          style={{
-            borderColor: 'rgba(120,165,255,0.5)',
-            background: 'radial-gradient(circle at 50% 35%, rgba(40,70,130,0.55), rgba(8,12,22,0.65))',
-            boxShadow: '0 0 18px rgba(59,130,246,0.35), inset 0 0 14px rgba(70,130,240,0.25)',
-          }}
-        >
-          x1
-        </div>
-        <div className="text-center">
+        <div className="cr-panel px-4 py-2 text-center">
           <div className="cr-label">Score</div>
           <span ref={scoreRef} className="text-2xl font-extrabold tabular-nums text-white">0</span>
         </div>

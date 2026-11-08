@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { gameOverUnlocked, useGameStore } from '../game/store'
+import { gameOverUnlocked, scoreOf, useGameStore } from '../game/store'
 import { CONFIG } from '../game/config'
 
 /** A labeled stat block for the game-over summary. */
@@ -30,6 +30,7 @@ export function GameOverScreen() {
   const lastDistance = useGameStore((s) => s.lastDistance)
   const best = useGameStore((s) => s.best)
   const coins = useGameStore((s) => s.coins)
+  const bonus = useGameStore((s) => s.bonus)
 
   // Tap-lock: ignore input for a moment after the screen appears, so a swipe
   // still in progress at the moment of death can't instantly skip the results.
@@ -72,9 +73,10 @@ export function GameOverScreen() {
       </div>
 
       <div className="cr-panel flex items-start gap-9 px-8 py-5">
+        <Stat label="Score" value={scoreOf(lastDistance, coins, CONFIG.coinValue, bonus)} accent />
         <Stat label="Distance" value={lastDistance} />
         <Stat label="Best" value={best} />
-        <Stat label="Coins" value={coins} accent />
+        <Stat label="Coins" value={coins} />
       </div>
 
       <div className="flex items-center gap-4">

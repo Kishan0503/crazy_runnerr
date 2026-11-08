@@ -198,6 +198,59 @@ export async function showTuningPanel() {
   preview.add(fire, 'coin').name('Coin pickup')
   preview.close()
 
+  // Spawn tools (Phase 4A): put a pickup / vehicle / ramp+roof in front of you.
+  const spawnFolder = gui.addFolder('Spawn')
+  const [{ queueRow, queueChunk, setSpawnMode }, { CHUNKS }] = await Promise.all([import('../spawn'), import('../chunks')])
+  const lane = () => 1 + Math.round(Math.random() * 2) - 1
+  const spawnTools = {
+    shield: () => queueRow({ pickup: { lane: lane(), kind: 'shield' } }),
+    magnet: () => queueRow({ pickup: { lane: lane(), kind: 'magnet' } }),
+    double: () => queueRow({ pickup: { lane: lane(), kind: 'double' } }),
+    jetpack: () => queueRow({ pickup: { lane: lane(), kind: 'jetpack' } }),
+    car: () => queueRow({ obstacles: [{ lane: lane(), kind: 'car' }] }),
+    truck: () => queueRow({ obstacles: [{ lane: lane(), kind: 'truck' }] }),
+    roof: () => {
+      const l = lane()
+      queueRow({
+        surfaces: [
+          { lane: l, kind: 'ramp', length: CONFIG.rampLength, offset: 0 },
+          { lane: l, kind: 'roof', length: 28, offset: CONFIG.rampLength },
+        ],
+        coins: [{ lane: l, count: 11, y: CONFIG.roofHeight + 1, offset: CONFIG.rampLength + 1 }],
+      })
+    },
+  }
+  spawnFolder.add(spawnTools, 'shield').name('Pickup: Shield')
+  spawnFolder.add(spawnTools, 'magnet').name('Pickup: Magnet')
+  spawnFolder.add(spawnTools, 'double').name('Pickup: 2× Coins')
+  spawnFolder.add(spawnTools, 'jetpack').name('Pickup: Jetpack')
+  spawnFolder.add(spawnTools, 'car').name('Car')
+  spawnFolder.add(spawnTools, 'truck').name('Truck')
+  spawnFolder.add(spawnTools, 'roof').name('Ramp + rooftop')
+  // Hand-designed chunks: pick one and spawn it next; or restrict the generator.
+  const chunkTools = {
+    chunk: CHUNKS[0].id,
+    mirror: false,
+    spawn: () => queueChunk(chunkTools.chunk, chunkTools.mirror),
+    mode: 'mix',
+  }
+  spawnFolder.add(chunkTools, 'chunk', CHUNKS.map((c) => c.id)).name('Chunk')
+  spawnFolder.add(chunkTools, 'mirror').name('Mirror chunk')
+  spawnFolder.add(chunkTools, 'spawn').name('Spawn chunk')
+  spawnFolder
+    .add(chunkTools, 'mode', { 'Mix (normal)': 'mix', 'Chunks only': 'chunks', 'Random only': 'random' })
+    .name('Row source')
+    .onChange((m: 'mix' | 'chunks' | 'random') => setSpawnMode(m))
+  spawnFolder.close()
+
+  // Graphics quality (Phase 4P): Auto / High / Medium / Low.
+  const { useQuality } = await import('../quality')
+  const gfx = { quality: useQuality.getState().setting }
+  gui
+    .add(gfx, 'quality', { Auto: 'auto', High: 'high', Medium: 'medium', Low: 'low' })
+    .name('Graphics quality')
+    .onChange((q: 'auto' | 'high' | 'medium' | 'low') => useQuality.getState().setSetting(q))
+
   // Read-only renderer stats (updated each frame by DebugScene).
   const perf = gui.addFolder('Perf')
   perf.add(perfStats, 'drawCalls').name('Draw calls').listen().disable()

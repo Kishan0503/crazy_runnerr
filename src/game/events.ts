@@ -26,6 +26,11 @@ export interface GameEvents {
   abilityOff: { id: string }
   gameOver: { newBest: boolean }
   uiClick: undefined
+  // Phase 4A
+  pickup: { kind: 'shield' | 'magnet' | 'double' | 'jetpack' }
+  pickupEnd: { kind: 'shield' | 'magnet' | 'double' | 'jetpack' }
+  shieldBreak: undefined
+  vehicleNear: { kind: 'car' | 'truck' }
 }
 
 export type GameEvent = keyof GameEvents

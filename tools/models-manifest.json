@@ -3,29 +3,75 @@
   "kits": {
     "city": "raw/models/kenney_city-kit-roads/Models/GLB format",
     "racing": "raw/models/kenney_racing-kit/Models/GLTF format",
-    "platformer": "raw/models/kenney_platformer-kit/Models/GLB format"
+    "platformer": "raw/models/kenney_platformer-kit/Models/GLB format",
+    "car": "raw/models/kenney_car-kit/Models/GLB format"
   },
   "props": {
-    "obstacle_low": {
-      "src": "racing:barrierWall",
+    "obstacle_low_fence": {
+      "src": "city:construction-fence",
+      "rotateY": 90,
       "fit": [
         1.6,
         0.9,
-        0.8
+        0.34
       ],
-      "out": "public/models/obstacle_low.glb"
+      "out": "public/models/obstacle_low_fence.glb"
     },
-    "obstacle_overhead": {
-      "src": "racing:overheadRoundColored",
+    "obstacle_low_spikes": {
+      "src": "platformer:spike-block-wide",
+      "fit": [
+        1.6,
+        0.9,
+        0.6
+      ],
+      "out": "public/models/obstacle_low_spikes.glb"
+    },
+    "obstacle_low_dumpster": {
+      "src": "city:dumpster",
+      "rotateY": 90,
+      "fit": [
+        1.6,
+        0.9,
+        1
+      ],
+      "out": "public/models/obstacle_low_dumpster.glb"
+    },
+    "obstacle_over_sign": {
+      "src": "city:sign-highway",
+      "rotateY": 90,
       "fit": [
         1.8,
         1.7,
-        0.6
+        0.24
       ],
-      "out": "public/models/obstacle_overhead.glb"
+      "out": "public/models/obstacle_over_sign.glb"
     },
-    "obstacle_block": {
-      "src": "platformer:crate-strong",
+    "obstacle_over_signwide": {
+      "src": "city:sign-highway-wide",
+      "rotateY": 90,
+      "fit": [
+        1.8,
+        1.7,
+        0.24
+      ],
+      "out": "public/models/obstacle_over_signwide.glb"
+    },
+    "obstacle_block_pillars": {
+      "src": "city:bridge-pillar-wide",
+      "stack": [
+        2,
+        1,
+        1
+      ],
+      "fit": [
+        1.6,
+        2.4,
+        0.8
+      ],
+      "out": "public/models/obstacle_block_pillars.glb"
+    },
+    "obstacle_block_spikes": {
+      "src": "platformer:spike-block",
       "stack": [
         2,
         3,
@@ -34,9 +80,9 @@
       "fit": [
         1.6,
         2.4,
-        0.9
+        0.8
       ],
-      "out": "public/models/obstacle_block.glb"
+      "out": "public/models/obstacle_block_spikes.glb"
     },
     "coin": {
       "src": "platformer:coin-gold",
@@ -47,6 +93,61 @@
       ],
       "out": "public/models/coin.glb",
       "center": true
+    },
+    "car_sports_sedan": {
+      "src": "car:sedan-sports",
+      "fit": [
+        1.6,
+        1.3,
+        3
+      ],
+      "out": "public/models/car_sports_sedan.glb"
+    },
+    "car_sports_hatchback": {
+      "src": "car:hatchback-sports",
+      "fit": [
+        1.6,
+        1.3,
+        3
+      ],
+      "out": "public/models/car_sports_hatchback.glb"
+    },
+    "car_race_future": {
+      "src": "car:race-future",
+      "fit": [
+        1.6,
+        1.3,
+        3
+      ],
+      "out": "public/models/car_race_future.glb"
+    },
+    "truck_fire": {
+      "src": "car:firetruck",
+      "fit": [
+        1.6,
+        2.4,
+        3.6
+      ],
+      "out": "public/models/truck_fire.glb"
+    },
+    "truck_garbage": {
+      "src": "car:garbage-truck",
+      "fit": [
+        1.6,
+        2.4,
+        3.6
+      ],
+      "out": "public/models/truck_garbage.glb"
+    },
+    "ramp": {
+      "src": "city:road-slant",
+      "rotateY": 90,
+      "fit": [
+        1.8,
+        1.9,
+        6
+      ],
+      "out": "public/models/ramp.glb"
     }
   },
   "characters": {

@@ -4,6 +4,10 @@ import { useAnimations, useGLTF } from '@react-three/drei'
 import { Box3, Group, LoopOnce, LoopRepeat, MathUtils, Mesh, SkinnedMesh, Vector3 } from 'three'
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js'
 import { CONFIG, PLAYER_SIZE } from '../game/config'
+
+/** Forward lean while flying with the jetpack (radians): the pack rides above the body. */
+const JET_LEAN = 1.0
+
 import { inputBus } from '../game/input'
 import { applyIntent, stepPlayer } from '../game/player'
 import { player } from '../game/playerState'
@@ -12,6 +16,9 @@ import { world } from '../game/world'
 import { useGameStore } from '../game/store'
 import { useCharacterStore } from '../game/characterStore'
 import { stripRootMotion } from '../game/animation'
+import { isPickupActive } from '../game/pickups'
+import { floorAt, surfaces } from '../game/floor'
+import { PickupVisuals } from './PickupVisuals'
 import { LIBRARY_URL, hipsAnimY, mergeLibraryClips, nodeNames } from '../game/animationLibrary'
 import { emit } from '../game/events'
 import { fx, nowSec } from '../game/fxState'
@@ -135,7 +142,7 @@ export function Player() {
         // After a mid-air crash, settle the fallen body onto the ground (visual only).
         o.position.y =
           useGameStore.getState().phase === 'gameover'
-            ? MathUtils.damp(o.position.y, 0, 10, Math.min(delta, 0.05))
+            ? MathUtils.damp(o.position.y, 0, 10, Math.min(delta, CONFIG.maxFrameDt))
             : player.y
         o.rotation.z = 0
         o.scale.y = animMode.current === 'procedural' ? player.scaleY : 1
@@ -151,12 +158,14 @@ export function Player() {
       return
     }
     // Clamp so a tab refocus can't teleport (§8.3); scale for the death slow-mo.
-    const dt = Math.min(delta, 0.05) * world.timeScale
+    const dt = Math.min(delta, CONFIG.maxFrameDt) * world.timeScale
     const s = player
     const speedMult = speedMultiplierAt(world.distance)
 
     for (const intent of inputBus.drain()) applyIntent(s, intent, speedMult)
-    stepPlayer(s, dt, speedMult)
+    // Jetpack flight + the floor under us (ramps / rooftops, Phase 4A).
+    s.flying = isPickupActive('jetpack')
+    stepPlayer(s, dt, speedMult, floorAt(s.x, s.y, surfaces.values()))
 
     // A fresh run resets the player's counters to 0 — resync our trackers.
     if (world.runId !== lastRun.current) {
@@ -193,6 +202,9 @@ export function Player() {
       o.position.x = s.x
       o.position.y = s.y + wobbleHop
       o.rotation.z = wobbleRoll
+      // Jetpack flight: lean forward so the pack rides above the body and faces
+      // the camera, like a real jetpack flyer.
+      o.rotation.x = MathUtils.damp(o.rotation.x, s.flying ? -JET_LEAN : 0, 6, dt)
       // Visual squash only in procedural mode; clips pose the crouch themselves.
       // The LOGICAL slide height (s.scaleY) still drives collision either way.
       o.scale.y = proc ? s.scaleY : 1
@@ -247,6 +259,8 @@ export function Player() {
 
   return (
     <group ref={outer} name="player-rig" position={[CONFIG.lanes[1], 0, CONFIG.runnerZ]}>
+      {/* Shield bubble / jetpack worn while those pickups are active (Phase 4A). */}
+      <PickupVisuals />
       <group ref={anim}>
         {/* Show NOTHING while the model loads — no placeholder flash. The capsule
             placeholder is kept only as the error fallback for a genuinely
@@ -424,10 +438,18 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
     groundFrames.current = 16
   }, [object, modelScale])
 
+  // Tell the loading screen once this model has really been drawn a few times
+  // (its shaders are compiled then), so the reveal never stutters (Phase 4P).
+  // It stays hidden until grounded, so only visible frames count.
+  const drawn = useRef(0)
+  useFrame(() => {
+    if (drawn.current < 3 && ref.current?.visible && ++drawn.current === 3) useGameStore.getState().setPlayerShown()
+  })
+
   // Cross-fade between clips and drive the start-screen turn choreography.
   useFrame((_, delta) => {
     if (!hasClips) return
-    const dt = Math.min(delta, 0.05)
+    const dt = Math.min(delta, CONFIG.maxFrameDt)
     // Animations slow down with the world during the death slow-mo.
     mixer.timeScale = world.timeScale
     const s = player
@@ -456,7 +478,8 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
         if (clips.stumble) stumbleLeft.current = STUMBLE_CLIP_TIME
       }
       if (stumbleLeft.current > 0) stumbleLeft.current = Math.max(0, stumbleLeft.current - dt)
-      if (!s.grounded && clips.jump) want = clips.jump
+      if (s.flying && clips.idle) want = clips.idle // hanging under the jetpack
+      else if (!s.grounded && clips.jump) want = clips.jump
       else if (s.sliding && clips.slide) want = clips.slide
       else if (stumbleLeft.current > 0 && clips.stumble) want = clips.stumble
       turning.current = false
@@ -641,6 +664,7 @@ function PlayerModel({ url, onMode }: { url: string; onMode: (mode: AnimMode) =>
  * The procedural rig animates it just like the model.
  */
 function PlayerPlaceholder() {
+  useEffect(() => useGameStore.getState().setPlayerShown(), [])
   const h = PLAYER_SIZE.height
   const bodyRadius = 0.3
   const bodyLen = Math.max(0.1, h - bodyRadius * 2 - 0.34)

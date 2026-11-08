@@ -39,12 +39,29 @@ export function installDevBridge() {
  * lil-gui) is dynamically imported, so none of it ships in production.
  */
 async function installDebugTools() {
-  const [{ useDebugStore, debugObstacles }, panel] = await Promise.all([
+  const [{ useDebugStore, debugObstacles, perfStats }, panel] = await Promise.all([
     import('./debug/flags'),
     import('./debug/tuningPanel'),
   ])
-  // Live obstacles (lane/kind/z) for console inspection and scripted tests.
-  Object.assign((window as unknown as { __game: object }).__game, { obstacles: debugObstacles })
+  // Live obstacles (lane/kind/z), spawn queue, pickups + surfaces for console
+  // inspection and scripted tests.
+  const [{ queueRow, queueChunk, setSpawnMode }, { pickups }, { surfaces }, { track }] = await Promise.all([
+    import('./spawn'),
+    import('./pickups'),
+    import('./floor'),
+    import('./track'),
+  ])
+  Object.assign((window as unknown as { __game: object }).__game, {
+    obstacles: debugObstacles,
+    queueRow,
+    queueChunk,
+    setSpawnMode,
+    pickups,
+    surfaces,
+    perf: perfStats,
+    debug: useDebugStore,
+    track,
+  })
   // Saved tweaks apply even when the panel stays closed, so tuning sticks.
   panel.applySavedTuning()
 

@@ -1,21 +1,15 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useMemo, useRef } from 'react'
+import { CONFIG } from '../game/config'
 import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import { InstancedMesh, Mesh, MeshStandardMaterial, Object3D, type BufferGeometry } from 'three'
 import { world } from '../game/world'
+import { track } from '../game/track'
+import { WARM_Z, WarmTracker } from '../game/warmup'
 
-/** Floating height of a coin's centre above the ground. */
-export const COIN_Y = 1.0
 const COIN_URL = '/models/coin.glb'
 /** Max coins on screen at once (rows × up to 10 coins). */
 const MAX_COINS = 128
-
-/**
- * Live coin positions, written by each ActiveCoin (which owns movement and
- * collection) and drawn by <CoinField/> as ONE instanced mesh — a single draw
- * call for every coin on screen (Phase 3).
- */
-export const coinSlots = new Map<number, { x: number; z: number }>()
 
 /**
  * All coins in one InstancedMesh: the Kenney gold coin (pre-sized by
@@ -54,24 +48,31 @@ export function CoinField() {
     return { geometry, material }
   }, [scene])
 
-  useEffect(() => () => coinSlots.clear(), [])
+  const warm = useMemo(() => new WarmTracker(), [])
 
   useFrame((state, delta) => {
     const m = mesh.current
     if (!m) return
     // Spin while the world runs; freeze with it (pause / game over).
-    if (world.running) spin.current += Math.min(delta, 0.05) * world.timeScale * 3
+    if (world.running) spin.current += Math.min(delta, CONFIG.maxFrameDt) * world.timeScale * 3
     const bob = Math.sin(state.clock.elapsedTime * 3) * 0.06
     let i = 0
-    for (const c of coinSlots.values()) {
+    // Coin positions come straight from the track simulation (game/track.ts).
+    for (const c of track.coins) {
       if (i >= MAX_COINS) break
-      dummy.position.set(c.x, COIN_Y + bob, c.z)
+      dummy.position.set(c.x, c.y + bob, c.z)
       dummy.rotation.set(0, spin.current, 0)
       dummy.updateMatrix()
       m.setMatrixAt(i++, dummy.matrix)
     }
+    if (warm.shouldWarm() && i < MAX_COINS) {
+      dummy.position.set(0, 0, WARM_Z)
+      dummy.updateMatrix()
+      m.setMatrixAt(i++, dummy.matrix)
+    }
     m.count = i
-    m.instanceMatrix.needsUpdate = true
+    m.visible = i > 0
+    if (i > 0) m.instanceMatrix.needsUpdate = true
   })
 
   return <instancedMesh ref={mesh} args={[geometry, material, MAX_COINS]} castShadow frustumCulled={false} />

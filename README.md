@@ -33,6 +33,9 @@ localStorage).
 | `npm run test:watch` | Run tests in watch mode |
 | `npm run typecheck` | Type-check only |
 | `npm run audio:build` | Rebuild `public/audio` from raw sources (`raw/audio`, not in git) using `tools/audio-manifest.json` |
+| `npm run models:optimize` | Fit + compress props/obstacles/vehicles from `raw/models` into `public/models` using `tools/models-manifest.json` |
+| `npm run anims:build` | Rebuild the shared character animation file from the Mixamo clips |
+| `npm run characters:upload` | Upload optimized shop characters to Supabase storage (`dev` or `live`; needs local credentials) |
 
 ## Dev tools (development builds only)
 

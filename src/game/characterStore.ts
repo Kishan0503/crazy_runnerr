@@ -1,12 +1,6 @@
 import { create } from 'zustand'
 import { useGLTF } from '@react-three/drei'
-import {
-  buyWithCoinsRemote,
-  equipRemote,
-  fetchCatalog,
-  fetchOwned,
-  type Character,
-} from './characters'
+import { buyWithCoinsRemote, equipRemote, fetchCatalog, fetchOwned, type Character } from './characters'
 import { useAuthStore } from './auth'
 
 /** Warm the GPU/network cache for a character's model so equipping/playing is
@@ -61,14 +55,43 @@ const saveGuestActive = (id: string) => {
   }
 }
 
-export const useCharacterStore = create<CharacterStore>((set, get) => ({
-  catalog: [],
-  owned: [DEFAULT_ID],
-  activeId: DEFAULT_ID,
-  loading: false,
-  loaded: false,
+/**
+ * Last known catalog + equipped character, so a returning player's model starts
+ * downloading the instant the page opens instead of after the catalog round-trip
+ * (that wait kept the loading screen at "100%" for seconds). load() refreshes it
+ * in the background and corrects anything that changed.
+ */
+const CACHE_KEY = 'lane-runner:characters-cache'
+interface CharacterCache {
+  catalog: Character[]
+  owned: string[]
+  activeId: string
+}
+const readCache = (): CharacterCache | null => {
+  try {
+    const c = JSON.parse(localStorage.getItem(CACHE_KEY) ?? 'null') as CharacterCache | null
+    return c && Array.isArray(c.catalog) && c.catalog.length > 0 && typeof c.activeId === 'string' ? c : null
+  } catch {
+    return null
+  }
+}
+const writeCache = (c: CharacterCache) => {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(c))
+  } catch {
+    /* ignore */
+  }
+}
 
-  load: async () => {
+const cached = readCache()
+if (cached) preloadModel(cached.catalog.find((c) => c.id === cached.activeId)?.model_url)
+
+/** One load at a time; calls made meanwhile coalesce into a single re-run. */
+let inflight: Promise<void> | null = null
+let rerun = false
+
+export const useCharacterStore = create<CharacterStore>((set, get) => {
+  async function loadOnce() {
     set({ loading: true })
     const auth = useAuthStore.getState()
     const catalog = await fetchCatalog()
@@ -89,42 +112,70 @@ export const useCharacterStore = create<CharacterStore>((set, get) => ({
     if (!owned.includes(activeId)) activeId = owned[0] ?? DEFAULT_ID
 
     set({ catalog, owned, activeId, loading: false, loaded: true })
+    writeCache({ catalog, owned, activeId })
     // Warm the equipped character's model so the first run starts instantly.
     preloadModel(catalog.find((c) => c.id === activeId)?.model_url)
-  },
+  }
 
-  equip: async (id) => {
-    if (!get().isOwned(id)) return
-    set({ activeId: id })
-    preloadModel(get().catalog.find((c) => c.id === id)?.model_url)
-    const auth = useAuthStore.getState()
-    if (auth.status === 'authed' && auth.user) {
-      // Keep the CACHED profile in sync with the DB write, otherwise the next
-      // load() (e.g. reopening the picker) would revert activeId to the stale
-      // cached active_character_id. (Was the "equipped character jumps" bug.)
-      if (auth.profile) {
-        useAuthStore.setState({ profile: { ...auth.profile, active_character_id: id } })
+  return {
+    catalog: cached?.catalog ?? [],
+    owned: cached?.owned ?? [DEFAULT_ID],
+    activeId: cached?.activeId ?? DEFAULT_ID,
+    loading: false,
+    loaded: cached !== null,
+
+    load: () => {
+      if (inflight) {
+        rerun = true
+        return inflight
       }
-      await equipRemote(auth.user.id, id)
-    } else {
-      saveGuestActive(id)
-    }
-  },
+      inflight = (async () => {
+        do {
+          rerun = false
+          await loadOnce()
+        } while (rerun)
+      })().finally(() => {
+        inflight = null
+      })
+      return inflight
+    },
 
-  buy: async (id) => {
-    const { error } = await buyWithCoinsRemote(id)
-    if (error) return { error }
-    // Refresh server balance + ownership, then equip the new character.
-    await useAuthStore.getState().refresh()
-    const auth = useAuthStore.getState()
-    if (auth.user) {
-      const owned = Array.from(new Set([...get().owned, id, ...(await fetchOwned(auth.user.id))]))
-      set({ owned })
-    }
-    await get().equip(id)
-    return { error: null }
-  },
+    equip: async (id) => {
+      if (!get().isOwned(id)) return
+      set({ activeId: id })
+      writeCache({ catalog: get().catalog, owned: get().owned, activeId: id })
+      preloadModel(get().catalog.find((c) => c.id === id)?.model_url)
+      const auth = useAuthStore.getState()
+      if (auth.status === 'authed' && auth.user) {
+        // Keep the CACHED profile in sync with the DB write, otherwise the next
+        // load() (e.g. reopening the picker) would revert activeId to the stale
+        // cached active_character_id. (Was the "equipped character jumps" bug.)
+        if (auth.profile) {
+          useAuthStore.setState({
+            profile: { ...auth.profile, active_character_id: id },
+          })
+        }
+        await equipRemote(auth.user.id, id)
+      } else {
+        saveGuestActive(id)
+      }
+    },
 
-  isOwned: (id) => get().owned.includes(id),
-  activeCharacter: () => get().catalog.find((c) => c.id === get().activeId),
-}))
+    buy: async (id) => {
+      const { error } = await buyWithCoinsRemote(id)
+      if (error) return { error }
+      // Refresh server balance + ownership, then equip the new character.
+      await useAuthStore.getState().refresh()
+      const auth = useAuthStore.getState()
+      if (auth.user) {
+        const owned = Array.from(new Set([...get().owned, id, ...(await fetchOwned(auth.user.id))]))
+        set({ owned })
+      }
+      await get().equip(id)
+      return { error: null }
+    },
+
+    isOwned: (id) => get().owned.includes(id),
+    activeCharacter: () => get().catalog.find((c) => c.id === get().activeId),
+  }
+})

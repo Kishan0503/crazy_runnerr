@@ -40,8 +40,8 @@ const duration = (file) => {
 function encode(src, base, { filter, complex, stereo }) {
   const ch = stereo ? [] : ['-ac', '1']
   const graph = complex ? ['-filter_complex', complex, '-map', '[out]'] : filter ? ['-af', filter] : []
-  run(['-i', src, ...graph, ...ch, '-c:a', 'libopus', '-b:a', stereo ? '96k' : '48k', `${base}.webm`])
-  run(['-i', src, ...graph, ...ch, '-c:a', 'libmp3lame', '-b:a', stereo ? '128k' : '64k', `${base}.mp3`])
+  run(['-i', src, ...graph, ...ch, '-c:a', 'libopus', '-b:a', stereo ? '64k' : '48k', `${base}.webm`])
+  run(['-i', src, ...graph, ...ch, '-c:a', 'libmp3lame', '-b:a', stereo ? '96k' : '64k', `${base}.mp3`])
 }
 
 const kb = (f) => Math.round(statSync(f).size / 1024)
@@ -56,11 +56,15 @@ const report = (id, base) => {
 for (const [group, sub] of [['sfx', 'sfx'], ['jingles', 'sfx']]) {
   console.log(`== ${group}`)
   mkdirSync(join(outDir, sub), { recursive: true })
-  for (const [id, rel] of Object.entries(manifest[group])) {
+  for (const [id, entry] of Object.entries(manifest[group])) {
+    // An entry is a source path, or { src, end } to also cut it at `end` seconds
+    // (with a short fade so the cut doesn't click).
+    const { src: rel, end } = typeof entry === 'string' ? { src: entry } : entry
     const src = join(rawDir, rel)
     if (!existsSync(src)) throw new Error(`missing source for ${id}: ${src}`)
     const base = join(outDir, sub, id)
-    encode(src, base, { filter: TRIM_SILENCE })
+    const cut = end ? `,atrim=0:${end},afade=t=out:st=${Math.max(0, end - 0.25)}:d=0.25` : ''
+    encode(src, base, { filter: TRIM_SILENCE + cut })
     report(id, base)
   }
 }

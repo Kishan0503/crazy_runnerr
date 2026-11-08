@@ -44,6 +44,8 @@ export interface PlayerRuntime {
   stumbleTimer: number
   /** increments on every stumble, so the rig/HUD can play feedback once */
   stumbleSeq: number
+  /** jetpack flight (Phase 4A): hovering at altitude, jump/slide disabled */
+  flying: boolean
 }
 
 /** Outcome of a stumble: survivable once per window, fatal inside it. */

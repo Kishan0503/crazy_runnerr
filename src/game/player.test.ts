@@ -249,3 +249,69 @@ describe('stumble', () => {
     expect(s.lane).toBe(1)
   })
 })
+
+describe('floor: ramps & rooftops (Phase 4A)', () => {
+  it('lands on a raised floor (jumping onto a roof)', () => {
+    const s = createPlayerState()
+    applyIntent(s, 'jump')
+    let t = 0
+    while (!s.grounded && t < 2) {
+      stepPlayer(s, DT, 1, s.vy < 0 ? CONFIG.roofHeight : 0) // roof under us on the way down
+      t += DT
+    }
+    expect(s.grounded).toBe(true)
+    expect(s.y).toBeCloseTo(CONFIG.roofHeight)
+  })
+
+  it('follows a ramp up smoothly while grounded', () => {
+    const s = createPlayerState()
+    for (let i = 1; i <= 10; i++) stepPlayer(s, DT, 1, (i / 10) * CONFIG.roofHeight)
+    expect(s.grounded).toBe(true)
+    expect(s.y).toBeCloseTo(CONFIG.roofHeight)
+  })
+
+  it('falls when walking off the end of a roof, and lands on the road', () => {
+    const s = { ...createPlayerState(), y: CONFIG.roofHeight }
+    stepPlayer(s, DT, 1, 0) // roof ends under us
+    expect(s.grounded).toBe(false)
+    untilLanded(s)
+    expect(s.y).toBe(0)
+    expect(s.grounded).toBe(true)
+  })
+
+  it('still jumps and slides normally on a roof', () => {
+    const s = { ...createPlayerState(), y: CONFIG.roofHeight }
+    applyIntent(s, 'slide')
+    expect(s.sliding).toBe(true)
+    stepPlayer(s, DT, 1, CONFIG.roofHeight)
+    applyIntent(s, 'jump')
+    expect(s.grounded).toBe(false)
+  })
+})
+
+describe('jetpack flight (Phase 4A)', () => {
+  it('rises to flight altitude and ignores jump / slide', () => {
+    const s = { ...createPlayerState(), flying: true }
+    simulate(s, 2)
+    expect(s.y).toBeCloseTo(CONFIG.jetpackHeight, 1)
+    applyIntent(s, 'jump')
+    applyIntent(s, 'slide')
+    expect(s.sliding).toBe(false)
+    expect(s.jumpSeq).toBe(0)
+  })
+
+  it('still switches lanes while flying', () => {
+    const s = { ...createPlayerState(), flying: true }
+    applyIntent(s, 'left')
+    expect(s.lane).toBe(0)
+  })
+
+  it('falls back to the road when the flight ends', () => {
+    const s = { ...createPlayerState(), flying: true }
+    simulate(s, 2)
+    s.flying = false
+    untilLanded(s)
+    expect(s.y).toBe(0)
+    expect(s.grounded).toBe(true)
+  })
+})

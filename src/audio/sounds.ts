@@ -21,8 +21,15 @@ export type SfxId =
   | 'toggle'
   | 'jingleGameOver'
   | 'jingleNewBest'
+  | 'pickup'
+  | 'pickupEnd'
+  | 'shieldBreak'
+  | 'hornCar'
+  | 'hornTruck'
 
 export type MusicId = 'musicMenu' | 'musicRun'
+/** Looping sound effects (built like music loops, played on the SFX volume). */
+export type LoopId = 'loopJetpack'
 
 /** Base volume per sound (before the player's SFX volume). */
 export const SFX: Record<SfxId, number> = {
@@ -43,6 +50,15 @@ export const SFX: Record<SfxId, number> = {
   toggle: 0.5,
   jingleGameOver: 0.7,
   jingleNewBest: 0.75,
+  pickup: 0.6,
+  pickupEnd: 0.4,
+  shieldBreak: 0.8,
+  hornCar: 0.45,
+  hornTruck: 0.5,
+}
+
+export const LOOPS: Record<LoopId, number> = {
+  loopJetpack: 0.5,
 }
 
 export const MUSIC: Record<MusicId, number> = {
@@ -52,4 +68,4 @@ export const MUSIC: Record<MusicId, number> = {
 
 const BASE = `${import.meta.env.BASE_URL}audio`
 export const sfxSrc = (id: SfxId) => [`${BASE}/sfx/${id}.webm`, `${BASE}/sfx/${id}.mp3`]
-export const musicSrc = (id: MusicId) => [`${BASE}/music/${id}.webm`, `${BASE}/music/${id}.mp3`]
+export const musicSrc = (id: MusicId | LoopId) => [`${BASE}/music/${id}.webm`, `${BASE}/music/${id}.mp3`]

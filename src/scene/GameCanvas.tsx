@@ -1,9 +1,11 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useRef } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { AdaptiveDpr, Preload } from '@react-three/drei'
+import { PerformanceMonitor, Preload } from '@react-three/drei'
 import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing'
 import { CONFIG, SCENE_BG } from '../game/config'
 import { useGameStore } from '../game/store'
+import { pixelRatio, TIERS, useQuality } from '../game/quality'
+import { world } from '../game/world'
 import { GameLoop } from './GameLoop'
 import { Track } from './Track'
 import { Player } from './Player'
@@ -16,20 +18,44 @@ import { Particles } from './Particles'
 // chunk is never referenced or emitted.
 const DebugScene = import.meta.env.DEV ? lazy(() => import('./debug/DebugScene')) : null
 
+/** Seconds between two auto-quality steps down (lets the frame rate settle). */
+const DECLINE_COOLDOWN = 4
+
+/** Built-in canvas MSAA only when there's no post-processing (it would be wasted). */
+const initialTier = useQuality.getState().applied
+
 export function GameCanvas() {
-  // Remount the obstacle field on each fresh run so a restart never inherits a
-  // stale obstacle that could re-trigger game over before React clears it.
-  const runId = useGameStore((s) => s.runId)
+  // Quality tier (Phase 4P): resolution, bloom, shadow size. Changes only between
+  // runs; mid-run the auto mode may only lower the pixel ratio (dprCap).
+  const tier = useQuality((s) => s.applied)
+  const dprCap = useQuality((s) => s.dprCap)
+  const spec = TIERS[tier]
+  const lastDecline = useRef(0)
+  const onDecline = () => {
+    // Judge real gameplay only (menus and the warm-up frames don't count).
+    if (!world.running || useGameStore.getState().phase !== 'playing') return
+    const now = performance.now() / 1000
+    if (now - lastDecline.current < DECLINE_COOLDOWN) return
+    lastDecline.current = now
+    useQuality.getState().decline()
+  }
+
   return (
     <Canvas
       className="h-full w-full"
       shadows
-      // Cap DPR for perf; AdaptiveDpr scales it down under load (PRD §13).
-      dpr={[1, 2]}
-      gl={{ antialias: true, powerPreference: 'high-performance' }}
+      dpr={pixelRatio(tier, dprCap)}
+      gl={{ antialias: !TIERS[initialTier].bloom, powerPreference: 'high-performance', stencil: false }}
       // Signal "scene visible" after the first painted frame so the Start-screen
       // intro reveal plays for the user instead of behind the load flash.
-      onCreated={() => requestAnimationFrame(() => useGameStore.getState().setReady())}
+      onCreated={({ gl }) => {
+        // Reading the shader log after every compile blocks on the GPU driver;
+        // only worth it while developing (Phase 4P).
+        gl.debug.checkShaderErrors = import.meta.env.DEV
+        requestAnimationFrame(() => {
+          useGameStore.getState().setReady()
+        })
+      }}
       camera={{
         position: [...CONFIG.cameraPos],
         fov: CONFIG.cameraFov,
@@ -48,11 +74,12 @@ export function GameCanvas() {
       <hemisphereLight args={['#9fc0ff', '#0a1124', 0.6]} />
       <ambientLight intensity={0.4} />
       <directionalLight
+        key={spec.shadowMap}
         position={[5, 13, 7]}
         intensity={1.7}
         color="#dfe9ff"
         castShadow
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[spec.shadowMap, spec.shadowMap]}
         shadow-bias={-0.0005}
         shadow-camera-near={1}
         shadow-camera-far={40}
@@ -78,23 +105,27 @@ export function GameCanvas() {
         <Environment />
         <Track />
         <Player />
-        <ObstacleField key={runId} />
+        <ObstacleField />
         <Particles />
         <Preload all />
       </Suspense>
 
-      {/* Neon glow + a touch of vignette for cinematic depth. */}
-      <EffectComposer multisampling={4}>
-        <Bloom
-          intensity={0.85}
-          luminanceThreshold={0.55}
-          luminanceSmoothing={0.25}
-          mipmapBlur
-        />
-        <Vignette eskil={false} offset={0.25} darkness={0.75} />
-      </EffectComposer>
+      {/* Neon glow + a touch of vignette for cinematic depth (off on the low tier). */}
+      {spec.bloom && (
+        <EffectComposer multisampling={spec.msaa}>
+          <Bloom
+            intensity={0.85}
+            luminanceThreshold={0.55}
+            luminanceSmoothing={0.25}
+            mipmapBlur
+            resolutionScale={spec.bloomScale}
+          />
+          <Vignette eskil={false} offset={0.25} darkness={0.75} />
+        </EffectComposer>
+      )}
 
-      <AdaptiveDpr pixelated={false} />
+      {/* Auto quality: watches the frame rate and steps down when it's too low. */}
+      <PerformanceMonitor bounds={() => [42, 1000]} flipflops={Infinity} onDecline={onDecline} />
 
       {DebugScene && (
         <Suspense fallback={null}>

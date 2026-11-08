@@ -19,6 +19,10 @@ export function useAuthSync() {
     useAuthStore.getState().init()
 
     let reconciled = false
+    // Only reload characters when it matters (login/logout or a different equipped
+    // character) — not on every balance/profile refresh. Authed players wait for
+    // their profile so the first load already knows the equipped character.
+    let charKey = ''
     const apply = (s: ReturnType<typeof useAuthStore.getState>) => {
       const game = useGameStore.getState()
       if (s.status === 'authed' && s.profile) {
@@ -36,10 +40,28 @@ export function useAuthSync() {
         game.setSyncedProgress(loadBest(), loadWallet())
       }
       // (Re)load the character catalog + ownership for the current auth state.
-      if (s.status !== 'loading') void useCharacterStore.getState().load()
+      const key =
+        s.status === 'guest'
+          ? 'guest'
+          : s.status === 'authed' && s.profile
+            ? `${s.user?.id}|${s.profile.active_character_id ?? ''}`
+            : ''
+      if (key && key !== charKey) {
+        charKey = key
+        void useCharacterStore.getState().load()
+      }
     }
 
     apply(useAuthStore.getState())
-    return useAuthStore.subscribe(apply)
+    // Safety net: if a signed-in profile never arrives (network error), load the
+    // characters anyway so the loading screen can't get stuck.
+    const fallback = setTimeout(() => {
+      if (!useCharacterStore.getState().loaded) void useCharacterStore.getState().load()
+    }, 4000)
+    const off = useAuthStore.subscribe(apply)
+    return () => {
+      clearTimeout(fallback)
+      off()
+    }
   }, [])
 }

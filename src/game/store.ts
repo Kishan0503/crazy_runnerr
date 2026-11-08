@@ -10,6 +10,8 @@ import { useCharacterStore } from './characterStore'
 import { CONFIG } from './config'
 import { emit } from './events'
 import { resetFx } from './fxState'
+import { resetPickups } from './pickups'
+import { resetTrack } from './track'
 
 /**
  * Game phase state machine (PRD §5):
@@ -22,6 +24,12 @@ interface GameStore {
   /** true once the R3F canvas has painted its first frame (gates the intro reveal) */
   ready: boolean
   setReady: () => void
+  /** true once the loading screen has closed: late assets (vehicles, ramp, audio) may load now */
+  booted: boolean
+  setBooted: () => void
+  /** the player character has been drawn (its shaders compiled) — the loading screen waits for it */
+  playerShown: boolean
+  setPlayerShown: () => void
   /** coins collected this run (separate counter, §4.7) */
   coins: number
   /** persistent coin wallet — running total across all runs (shown on start) */
@@ -53,7 +61,10 @@ interface GameStore {
   /** abandon the run and return to the start screen */
   quit: () => void
   /** player picked up a coin (discrete event — safe for React state) */
-  collectCoin: () => void
+  collectCoin: (amount?: number) => void
+  /** bonus score earned this run (e.g. obstacles burned by an ability) */
+  bonus: number
+  addBonus: (points: number) => void
   /** push server-synced totals into the store (called after login / refresh) */
   setSyncedProgress: (best: number, wallet: number) => void
 }
@@ -65,6 +76,8 @@ function freshRun() {
   resetSpawner()
   inputBus.clear()
   resetFx()
+  resetPickups()
+  resetTrack()
   // Arm the equipped character's ability for this run (charges reset to max).
   resetAbility(useCharacterStore.getState().activeCharacter()?.ability_id ?? null)
 }
@@ -80,6 +93,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   phase: 'start',
   ready: false,
   setReady: () => set({ ready: true }),
+  booted: false,
+  setBooted: () => set({ booted: true }),
+  playerShown: false,
+  setPlayerShown: () => {
+    if (!get().playerShown) set({ playerShown: true })
+  },
   coins: 0,
   wallet: loadWallet(),
   best: loadBest(),
@@ -103,7 +122,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     freshRun() // sets world.running = true and bumps world.runId
     // Mirror the new runId into React state so the obstacle field remounts
     // synchronously and no obstacle from the previous run can survive a frame.
-    set({ phase: 'playing', coins: 0, starting: false, runId: world.runId, newBest: false })
+    set({ phase: 'playing', coins: 0, bonus: 0, starting: false, runId: world.runId, newBest: false })
     emit('runStart')
   },
 
@@ -159,10 +178,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // into React state, same as start() — otherwise <ObstacleField key={runId}>
     // never remounts and every obstacle/coin from the run stays frozen in place
     // behind the start screen.
-    set({ phase: 'start', coins: 0, starting: false, runId: world.runId })
+    set({ phase: 'start', coins: 0, bonus: 0, starting: false, runId: world.runId })
   },
 
-  collectCoin: () => set((s) => ({ coins: s.coins + 1 })),
+  collectCoin: (amount = 1) => set((s) => ({ coins: s.coins + amount })),
+  bonus: 0,
+  addBonus: (points) => set((s) => ({ bonus: s.bonus + points })),
 
   setSyncedProgress: (best, wallet) => set({ best, wallet }),
 }))
@@ -172,7 +193,7 @@ export function gameOverUnlocked(): boolean {
   return performance.now() - useGameStore.getState().gameOverAt >= CONFIG.gameOverLock * 1000
 }
 
-/** Total score = distance + a flat bonus per coin (§4.7). Computed, not stored. */
-export function scoreOf(distance: number, coins: number, coinValue: number): number {
-  return Math.floor(distance) + coins * coinValue
+/** Total score = distance + a flat bonus per coin (§4.7) + any bonus points. Computed, not stored. */
+export function scoreOf(distance: number, coins: number, coinValue: number, bonus = 0): number {
+  return Math.floor(distance) + coins * coinValue + bonus
 }

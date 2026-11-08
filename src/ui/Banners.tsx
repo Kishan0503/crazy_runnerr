@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { on } from '../game/events'
 
 type Kind = 'speed' | 'milestone' | 'best' | 'close'
+
+const PICKUP_LABEL = { shield: 'SHIELD!', magnet: 'MAGNET!', double: '2× COINS!', jetpack: 'JETPACK!' } as const
 interface Banner {
   id: number
   text: string
@@ -47,6 +49,8 @@ export function Banners() {
       on('milestone', ({ meters }) => push(meters % 1000 === 0 ? `${meters / 1000} KM!` : `${meters} m!`, 'milestone')),
       on('newBest', () => push('NEW BEST!', 'best')),
       on('nearMiss', () => push('CLOSE!', 'close')),
+      on('pickup', ({ kind }) => push(PICKUP_LABEL[kind], 'close')),
+      on('shieldBreak', () => push('SHIELD SAVED YOU!', 'close')),
       on('crash', () =>
         flashRef.current?.animate([{ opacity: 0.85 }, { opacity: 0 }], { duration: 260, easing: 'ease-out' }),
       ),

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { CONFIG } from '../game/config'
 import { useFrame, useThree } from '@react-three/fiber'
 import {
   AdditiveBlending,
@@ -230,7 +231,7 @@ function Particles() {
     if (!pts) return
     const attr = pts.geometry.getAttribute('position') as BufferAttribute
     const a = attr.array as Float32Array
-    const dt = Math.min(delta, 0.05)
+    const dt = Math.min(delta, CONFIG.maxFrameDt)
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       a[i * 3 + 1] += dt * 0.4 // gentle rise
       let z = a[i * 3 + 2] + world.dz * 0.6

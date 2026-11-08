@@ -6,9 +6,10 @@ import { on } from '../game/events'
 import { player } from '../game/playerState'
 import { world } from '../game/world'
 import { useGameStore } from '../game/store'
+import { isPickupActive } from '../game/pickups'
 
 /** Pool size — every live spark/puff shares ONE instanced draw call. */
-const MAX = 128
+const MAX = 192
 
 interface Preset {
   count: number
@@ -22,6 +23,8 @@ interface Preset {
   gravity: number
   life: [number, number]
   size: number
+  /** how much it scrolls back with the road (1 = stays on the road, 0 = moves with the runner) */
+  drift?: number
 }
 
 const PRESETS = {
@@ -31,6 +34,10 @@ const PRESETS = {
   slide: { count: 6, colors: ['#6fb3ff', '#bfe0ff'], speed: [2, 3.5], dir: [0, 0.4, 3], spread: 0.6, gravity: 4, life: [0.25, 0.4], size: 0.07 },
   stumble: { count: 9, colors: ['#ffa024', '#ffd27a'], speed: [2.5, 4.5], dir: [0, 1.5, 0], spread: 1, gravity: 8, life: [0.3, 0.5], size: 0.09 },
   crash: { count: 18, colors: ['#ffffff', '#8fc2ff', '#4f80ff'], speed: [4, 8], dir: [0, 2, 1.5], spread: 1, gravity: 9, life: [0.5, 0.9], size: 0.12 },
+  pickup: { count: 14, colors: ['#ffffff', '#fff3b0', '#9ad8ff'], speed: [2, 4], dir: [0, 2, 0], spread: 1, gravity: 3, life: [0.4, 0.7], size: 0.08 },
+  shieldBreak: { count: 22, colors: ['#4fb4ff', '#bfe4ff', '#ffffff'], speed: [4, 7], dir: [0, 1.5, 1], spread: 1, gravity: 7, life: [0.5, 0.8], size: 0.11 },
+  // Jetpack exhaust: soft pale puffs streaming down and back from the nozzles.
+  exhaust: { count: 1, colors: ['#a9bbdc', '#8aa2c8', '#cfe3ff', '#6fbfff'], speed: [0.3, 0.7], dir: [0, -2.8, 0.6], spread: 0.4, gravity: -1, life: [0.16, 0.28], size: 0.07, drift: 0.12 },
 } satisfies Record<string, Preset>
 
 type PresetName = keyof typeof PRESETS
@@ -46,6 +53,7 @@ const rand = (a: number, b: number) => a + Math.random() * (b - a)
 export function Particles() {
   const mesh = useRef<InstancedMesh>(null)
   const dummy = useMemo(() => new Object3D(), [])
+  const burstRef = useRef<((name: PresetName, x: number, y: number, z: number) => void) | null>(null)
   const color = useMemo(() => new Color(), [])
   // Struct-of-arrays pool (no per-particle objects).
   const pool = useMemo(
@@ -56,6 +64,7 @@ export function Particles() {
       maxLife: new Float32Array(MAX),
       size: new Float32Array(MAX),
       gravity: new Float32Array(MAX),
+      drift: new Float32Array(MAX),
       next: 0,
     }),
     [],
@@ -93,11 +102,13 @@ export function Particles() {
         pool.life[i] = pool.maxLife[i] = rand(p.life[0], p.life[1])
         pool.size[i] = p.size * rand(0.7, 1.3)
         pool.gravity[i] = p.gravity
+        pool.drift[i] = p.drift ?? 1
         if (m) m.setColorAt(i, color.set(p.colors[n % p.colors.length]))
       }
       if (m?.instanceColor) m.instanceColor.needsUpdate = true
     }
 
+    burstRef.current = burst
     const atFeet = (name: PresetName) => burst(name, player.x, player.y + 0.05, CONFIG.runnerZ)
     const offs = [
       on('coin', () => burst('coin', player.x, 1.0, CONFIG.runnerZ - 0.2)),
@@ -105,6 +116,8 @@ export function Particles() {
       on('slide', () => atFeet('slide')),
       on('stumble', () => burst('stumble', player.x, player.y + 0.8, CONFIG.runnerZ - 0.3)),
       on('crash', () => burst('crash', player.x, player.y + 0.8, CONFIG.runnerZ - 0.4)),
+      on('pickup', () => burst('pickup', player.x, player.y + 1.0, CONFIG.runnerZ - 0.3)),
+      on('shieldBreak', () => burst('shieldBreak', player.x, player.y + 0.9, CONFIG.runnerZ - 0.5)),
       // A fresh run starts clean.
       on('runStart', () => pool.life.fill(0)),
     ]
@@ -119,12 +132,26 @@ export function Particles() {
     }
   }, [pool, color])
 
+  // Exhaust emitter state (puffs per second, accumulated across frames).
+  const exhaust = useRef({ acc: 0, side: 1 })
+
   useFrame((_, delta) => {
     const m = mesh.current
     if (!m) return
+    // Jetpack exhaust from both nozzles while flying (pooled, no new objects).
+    if (world.running && isPickupActive('jetpack') && burstRef.current) {
+      const e = exhaust.current
+      e.acc += Math.min(delta, CONFIG.maxFrameDt) * 70
+      while (e.acc >= 1) {
+        e.acc -= 1
+        e.side = -e.side
+        // Nozzle position on the forward-leaning rig (see Player JET_LEAN).
+        burstRef.current('exhaust', player.x + e.side * 0.15, player.y + 0.6, CONFIG.runnerZ - 0.05)
+      }
+    }
     // Freeze with the world (pause / game over); slow with the death slow-mo.
-    const dt = world.running ? Math.min(delta, 0.05) * world.timeScale : 0
-    const { pos, vel, life, maxLife, size, gravity } = pool
+    const dt = world.running ? Math.min(delta, CONFIG.maxFrameDt) * world.timeScale : 0
+    const { pos, vel, life, maxLife, size, gravity, drift } = pool
     for (let i = 0; i < MAX; i++) {
       if (life[i] > 0) {
         life[i] = Math.max(0, life[i] - dt)
@@ -132,7 +159,7 @@ export function Particles() {
         vel[j + 1] -= gravity[i] * dt
         pos[j] += vel[j] * dt
         pos[j + 1] = Math.max(0.02, pos[j + 1] + vel[j + 1] * dt)
-        pos[j + 2] += vel[j + 2] * dt + world.dz
+        pos[j + 2] += vel[j + 2] * dt + world.dz * drift[i]
         dummy.position.set(pos[j], pos[j + 1], pos[j + 2])
         dummy.rotation.set(life[i] * 9, life[i] * 7, 0)
         // Shrink to nothing over the last part of its life (no transparency needed).

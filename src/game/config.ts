@@ -8,6 +8,13 @@
 export const CONFIG = {
   lanes: [-2.2, 0, 2.2], // lane center X positions
   runnerZ: 2, // player's fixed depth
+  // Longest frame the simulation advances in one step (seconds). Above this the
+  // world slows instead of jumping (tab refocus, big hitch). 1/15 s keeps
+  // real-time pace through ordinary dips while staying below the smallest hit
+  // window at top speed (2.1 units/step vs 2.6); coins/pickups use swept tests.
+  maxFrameDt: 1 / 15,
+  // Seconds a speed-tier change takes to ease in (instead of an instant +25%).
+  speedEaseTime: 1.2,
   spawnZ: -88, // where obstacles/coins appear
   recycleZ: 14, // remove once past the camera
 
@@ -44,6 +51,25 @@ export const CONFIG = {
   fovKick: 7, // extra degrees on a speed-tier change (eases back)
   fovPerTier: 1.5, // permanent extra degrees per speed tier reached
   milestoneStep: 500, // metres between "500 m!" banners
+
+  // ---- Pickups (Phase 4A) ----
+  pickupShieldMax: 30, // seconds a shield lasts if it's never used
+  pickupMagnetTime: 10,
+  pickupDoubleTime: 10,
+  pickupJetpackTime: 10, // longer flights (was 6 s) — enough time to enjoy it
+  shieldGrace: 1, // invulnerable seconds after the shield breaks
+  jetpackGrace: 1.5, // invulnerable seconds after the jetpack ends (covers the descent)
+  jetpackHeight: 4.5, // flight altitude (above every obstacle)
+  jetpackSpeedMult: 1.4, // world speed while flying (feels powerful); eases in/out fast
+  pickupStartDistance: 120, // no pickups before this many metres
+  pickupMinGap: 180, // metres between pickups
+
+  // ---- Vehicles & rooftops (Phase 4A) ----
+  carSpeed: 8, // extra speed toward the player on top of the world speed (u/s)
+  truckSpeed: 5, // trucks are heavier/slower
+  vehicleStartDistance: 300, // no vehicles before this many metres (outside chunks)
+  roofHeight: 1.9, // rooftop surface height (jump peak ≈ 2.09, so roofs can be jumped onto)
+  rampLength: 6, // ramp run-up length (depth units)
 
   // ---- Speed: distance-stepped tiers, NOT continuous (§ updated mechanic) ----
   // Base forward speed = the 1.0x tier. Speed steps up by `speedTierStep` at each
@@ -91,7 +117,10 @@ export const SCENE_HORIZON = '#0e1b34'
  * mesh, so art and gameplay stay decoupled (§8.5). Dimensions are W×H×D with the
  * box centered at the given y; x/z come from the obstacle's lane and world z.
  */
-export type ObstacleKind = 'low' | 'overhead' | 'block'
+export type ObstacleKind = 'low' | 'overhead' | 'block' | 'car' | 'truck'
+
+/** Vehicles move toward the player on top of the world scroll (Phase 4A). */
+export const isVehicle = (kind: ObstacleKind) => kind === 'car' || kind === 'truck'
 
 export interface HitboxSpec {
   /** width (x), height (y), depth (z) */
@@ -103,9 +132,14 @@ export interface HitboxSpec {
 }
 
 export const HITBOXES: Record<ObstacleKind, HitboxSpec> = {
+  // `slot` = which group of looks (see OBSTACLE_SLOTS in modelRegistry.ts).
   low: { size: [1.6, 0.9, 0.8], centerY: 0.45, slot: 'obstacle_low' },
   overhead: { size: [1.8, 0.5, 0.6], centerY: 1.45, slot: 'obstacle_overhead' },
   block: { size: [1.6, 2.4, 0.9], centerY: 1.2, slot: 'obstacle_block' },
+  // Phase 4A vehicles. Cars are low enough to jump (peak ≈ 2.09 > 1.3) with good
+  // timing; trucks are tall box trucks you must dodge by switching lanes.
+  car: { size: [1.6, 1.3, 3.0], centerY: 0.65, slot: 'vehicle_car' },
+  truck: { size: [1.6, 2.4, 3.6], centerY: 1.2, slot: 'vehicle_truck' },
 }
 
 /** Player logical hitbox footprint (PRD §9.2: ~0.9 × runnerHeight × 0.9). */

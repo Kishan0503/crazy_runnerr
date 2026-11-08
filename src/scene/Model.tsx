@@ -1,7 +1,8 @@
 import { Component, Suspense, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { useGLTF } from '@react-three/drei'
-import { Box3, Group, Mesh, MeshStandardMaterial } from 'three'
+import { Box3, Group, Mesh, type Material } from 'three'
+import { prepareMaterial } from './bakeModel'
 import { MODELS } from '../game/modelRegistry'
 import type { ModelSlot } from '../game/modelRegistry'
 
@@ -22,30 +23,7 @@ function GltfModel({ slot }: { slot: ModelSlot }) {
       const mesh = o as Mesh
       if (!mesh.isMesh) return
       mesh.castShadow = true
-      let mat = mesh.material as MeshStandardMaterial
-      if (tint) {
-        mat = mat.clone()
-        mat.color.set(tint)
-        mesh.material = mat
-      }
-      // One-time setup of the shared material: matte look + a self-lit glow
-      // from its own texture so it stays readable at night and catches bloom.
-      if (!mat.userData.prepared) {
-        mat.userData.prepared = true
-        mat.metalness = 0.05
-        mat.roughness = 0.7
-        if (glow > 0) {
-          // Textured: glow with the texture's own colours. Flat-coloured parts
-          // (e.g. red / white stripes): glow in their own colour, never white.
-          if (mat.map) {
-            mat.emissive.set('#ffffff')
-            mat.emissiveMap = mat.map
-          } else {
-            mat.emissive.copy(mat.color)
-          }
-          mat.emissiveIntensity = glow
-        }
-      }
+      mesh.material = prepareMaterial(mesh.material as Material, glow, tint)
     })
     return c
   }, [scene, tint, glow])

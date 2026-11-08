@@ -1,10 +1,17 @@
 import { useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import type { PerspectiveCamera } from 'three'
+import { MathUtils, type PerspectiveCamera } from 'three'
 import { CONFIG } from '../game/config'
 import { on } from '../game/events'
 import { addTrauma, decayTrauma } from '../game/feedback'
 import { world } from '../game/world'
+import { player } from '../game/playerState'
+import { isPickupActive } from '../game/pickups'
+
+/** Jetpack flight camera: height above / distance behind the flyer, look height. */
+const FLY_CAM_UP = 2.3
+const FLY_CAM_BACK = 4.8
+const FLY_LOOK_UP = 1.0
 
 /** Smooth pseudo-noise in ~[-1, 1] from layered sines (cheap, no allocations). */
 const wobble = (t: number, seed: number) =>
@@ -23,7 +30,7 @@ const wobble = (t: number, seed: number) =>
  */
 export function CameraRig() {
   const camera = useThree((s) => s.camera) as PerspectiveCamera
-  const fx = useRef({ trauma: 0, kick: 0, tier: 0, dip: 0, t: 0, runId: -1 })
+  const fx = useRef({ trauma: 0, kick: 0, tier: 0, dip: 0, t: 0, runId: -1, lift: 0, fly: 0 })
 
   useEffect(() => {
     camera.position.set(...CONFIG.cameraPos)
@@ -33,6 +40,7 @@ export function CameraRig() {
     const s = fx.current
     const offs = [
       on('crash', () => (s.trauma = addTrauma(s.trauma, CONFIG.traumaCrash))),
+      on('shieldBreak', () => (s.trauma = addTrauma(s.trauma, 0.55))),
       on('stumble', () => (s.trauma = addTrauma(s.trauma, CONFIG.traumaStumble))),
       on('land', ({ hard }) => {
         s.dip = hard ? 0.12 : 0.05
@@ -52,7 +60,7 @@ export function CameraRig() {
   }, [camera])
 
   useFrame((_, delta) => {
-    const dt = Math.min(delta, 0.05)
+    const dt = Math.min(delta, CONFIG.maxFrameDt)
     const s = fx.current
     s.t += dt
     s.trauma = decayTrauma(s.trauma, dt, CONFIG.shakeDecay)
@@ -68,9 +76,19 @@ export function CameraRig() {
     const [px, py, pz] = CONFIG.cameraPos
     const [lx, ly, lz] = CONFIG.cameraLookAt
     const ox = wobble(s.t, 1) * shake
-    const oy = wobble(s.t, 7) * shake - s.dip
-    camera.position.set(px + ox, py + oy, pz)
-    camera.lookAt(lx + ox * 0.5, ly + oy * 0.5, lz)
+    // Follow the runner up onto rooftops / into jetpack flight (eased, partial).
+    s.lift = MathUtils.damp(s.lift, player.y * 0.35, 3, dt)
+    // Jetpack: ease to a flight camera above and behind the flyer, looking down
+    // a little onto the leaning runner's back and the pack on top, with the
+    // street and sky opening up ahead.
+    s.fly = MathUtils.damp(s.fly, isPickupActive('jetpack') ? 1 : 0, 2.2, dt)
+    const f = s.fly
+    const oy = wobble(s.t, 7) * shake - s.dip + s.lift
+    const camY = MathUtils.lerp(py + oy, player.y + FLY_CAM_UP + oy - s.lift, f)
+    const camZ = MathUtils.lerp(pz, CONFIG.runnerZ + FLY_CAM_BACK, f)
+    const lookY = MathUtils.lerp(ly + oy * 0.5, player.y + FLY_LOOK_UP, f)
+    camera.position.set(px + ox, camY, camZ)
+    camera.lookAt(lx + ox * 0.5, lookY, lz)
     camera.rotation.z += wobble(s.t, 13) * shake * 0.08 // a touch of roll
 
     const fov = CONFIG.cameraFov + s.tier * CONFIG.fovPerTier + s.kick

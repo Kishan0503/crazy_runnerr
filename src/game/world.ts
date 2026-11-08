@@ -20,6 +20,8 @@ interface World {
   distance: number
   /** how far the world should move in +Z this frame (speed × clamped dt) */
   dz: number
+  /** this frame's simulation step in seconds (clamped, slow-mo scaled) */
+  dt: number
   /** incremented on every fresh run; lets the scene drop stale obstacles at once */
   runId: number
   /** simulation speed multiplier: 1 normally, < 1 during the death slow-mo */
@@ -32,6 +34,7 @@ export const world: World = {
   speed: CONFIG.speedStart,
   distance: 0,
   dz: 0,
+  dt: 0,
   runId: 0,
   timeScale: 1,
 }
@@ -41,6 +44,7 @@ export function resetWorld() {
   world.speed = CONFIG.speedStart
   world.distance = 0
   world.dz = 0
+  world.dt = 0
   world.runId++
   world.timeScale = 1
   world.running = true

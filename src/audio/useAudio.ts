@@ -2,8 +2,9 @@ import { useEffect } from 'react'
 import { emit, on } from '../game/events'
 import { coinPitch } from '../game/feedback'
 import { CONFIG } from '../game/config'
+import { isPickupActive } from '../game/pickups'
 import { useGameStore, type Phase } from '../game/store'
-import { duckMusic, initAudio, playMusic, playSfx, slowMoMusic } from './audio'
+import { duckMusic, initAudio, playMusic, playSfx, slowMoMusic, startLoop, stopLoop } from './audio'
 
 const jitter = (amount: number) => 1 + (Math.random() * 2 - 1) * amount
 
@@ -15,10 +16,12 @@ const jitter = (amount: number) => 1 + (Math.random() * 2 - 1) * amount
  * gameplay event, plus a click for every button press anywhere in the UI.
  */
 export function useAudio() {
-  const ready = useGameStore((s) => s.ready)
+  // Audio loads only after the loading screen closes (Phase 4P), so it never
+  // competes with the game files on a slow connection.
+  const ready = useGameStore((s) => s.booted)
 
   useEffect(() => {
-    if (!ready) return // load audio after the first frame is on screen
+    if (!ready) return
     initAudio()
 
     // ---- Gameplay SFX ----
@@ -43,6 +46,23 @@ export function useAudio() {
       on('abilityOff', () => playSfx('abilityOff')),
       on('gameOver', ({ newBest }) => playSfx(newBest ? 'jingleNewBest' : 'jingleGameOver')),
       on('uiClick', () => playSfx('click')),
+      // Phase 4A
+      on('pickup', ({ kind }) => {
+        playSfx('pickup', { rate: kind === 'jetpack' ? 0.85 : 1 })
+        if (kind === 'jetpack') startLoop('loopJetpack')
+      }),
+      on('pickupEnd', ({ kind }) => {
+        if (kind === 'jetpack') stopLoop('loopJetpack')
+        if (kind !== 'shield') playSfx('pickupEnd')
+      }),
+      on('shieldBreak', () => playSfx('shieldBreak')),
+      on('vehicleNear', ({ kind }) => playSfx(kind === 'truck' ? 'hornTruck' : 'hornCar', { rate: jitter(0.04) })),
+      on('crash', () => stopLoop('loopJetpack')),
+      on('runStart', () => stopLoop('loopJetpack')),
+      on('pause', () => stopLoop('loopJetpack')),
+      on('resume', () => {
+        if (isPickupActive('jetpack')) startLoop('loopJetpack')
+      }),
     ]
 
     // ---- UI clicks: any button press (except the dev panel) ----

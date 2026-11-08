@@ -1,6 +1,6 @@
 import { Howl, Howler } from 'howler'
 import { useSettings } from '../game/settings'
-import { MUSIC, SFX, musicSrc, sfxSrc, type MusicId, type SfxId } from './sounds'
+import { LOOPS, MUSIC, SFX, musicSrc, sfxSrc, type LoopId, type MusicId, type SfxId } from './sounds'
 
 /**
  * Audio manager (Phase 2) on top of Howler (Web Audio, so music loops are
@@ -123,6 +123,26 @@ export function suspendAudio(on: boolean) {
   if (!ctx) return
   if (on && ctx.state === 'running') void ctx.suspend()
   else if (!on && ctx.state === 'suspended') void ctx.resume()
+}
+
+/** Looping SFX (e.g. the jetpack thrust): one instance each, faded in/out. */
+const loops = new Map<LoopId, Howl>()
+export function startLoop(id: LoopId) {
+  let h = loops.get(id)
+  if (!h) {
+    h = new Howl({ src: musicSrc(id), loop: true, preload: true, volume: 0 })
+    loops.set(id, h)
+  }
+  if (!h.playing()) h.play()
+  h.fade(h.volume(), LOOPS[id] * sfxGain(), 200)
+}
+export function stopLoop(id: LoopId) {
+  const h = loops.get(id)
+  if (!h || !h.playing()) return
+  h.fade(h.volume(), 0, 300)
+  h.once('fade', () => {
+    if (h.volume() === 0) h.stop()
+  })
 }
 
 /** Every SFX id — for the debug panel's "play all" tester. */
